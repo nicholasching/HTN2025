@@ -5,7 +5,8 @@ import { fetchAccounts, fetchChats, fetchMessages } from '@/lib/beeper';
 import type { Account, Chat, Message } from '@/lib/beeper';
 import { sendMessage } from '@/lib/beeper/postMessages';
 import FlirtingWingman from './FlirtingWingman';
-import ChatSummary from './ChatSummary';
+// Remove ChatSummary import since we're deleting that file
+// import ChatSummary from './ChatSummary';
 import ChatSummaryBadge from './ChatSummaryBadge';
 
 export default function BeeperExample() {
@@ -24,7 +25,8 @@ export default function BeeperExample() {
   const [messageInput, setMessageInput] = useState<string>('');
   const [sendingMessage, setSendingMessage] = useState<boolean>(false);
   const [unreadCount, setUnreadCount] = useState<number>(0);
-  const [showSummaryOverlay, setShowSummaryOverlay] = useState<boolean>(false);
+  // Remove showSummaryOverlay state since ChatSummary component is being deleted
+  // const [showSummaryOverlay, setShowSummaryOverlay] = useState<boolean>(false);
   const [chatSummaries, setChatSummaries] = useState<Record<string, { messages: Message[], unreadCount: number }>>({});
 
   // Load access token from environment variable on component mount
@@ -82,16 +84,6 @@ export default function BeeperExample() {
       }));
     }
   }, [messages, selectedChat]);
-
-  // Show summary overlay when a chat is first opened
-  useEffect(() => {
-    if (selectedChat && messages.length > 0) {
-      const chatSummary = chatSummaries[selectedChat];
-      if (chatSummary && chatSummary.unreadCount > 0) {
-        setShowSummaryOverlay(true);
-      }
-    }
-  }, [selectedChat, messages, chatSummaries]);
 
   // Full workflow function that mimics test.ts behavior
   const runFullWorkflow = async (token: string) => {
@@ -647,15 +639,15 @@ export default function BeeperExample() {
         messages={messages}
       />
 
-      {/* AI Summary Overlay */}
-      <ChatSummary
+      {/* Remove the ChatSummary popup component */}
+      {/* <ChatSummary
         chatId={selectedChat}
         chatName={currentChatName}
         messages={messages}
         unreadCount={unreadCount}
         isOpen={showSummaryOverlay}
         onClose={() => setShowSummaryOverlay(false)}
-      />
+      /> */}
     </div>
   );
 }
