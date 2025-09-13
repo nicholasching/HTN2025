@@ -26,7 +26,45 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Build the conversation context
+    // Check if this is a custom prompt from SimpleWingman (sent as a single System message)
+    const isCustomPrompt = context.length === 1 && context[0].sender === 'System';
+    
+    if (isCustomPrompt) {
+      // Use the custom prompt directly
+      const prompt = context[0].message + '\n\nIMPORTANT: Output ONLY the suggested response. Do not add any explanations, clarifications, commentary in parentheses, HTML tags, or meta-commentary.';
+      
+      // Use Cohere's REST API directly
+      const response = await fetch('https://api.cohere.ai/v1/generate', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'command',
+          prompt: prompt,
+          max_tokens: 100,
+          temperature: 0.8,
+          k: 0,
+          stop_sequences: ['\n\n', '<em>', '</em>', '(', ')', 'Text him', 'Text her', 'Send:', 'Reply:', 'Message:'],
+          return_likelihoods: 'NONE'
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Cohere API error: ${response.status}`);
+      }
+
+      const data = await response.json();
+      const suggestion = data.generations[0].text.trim();
+
+      return NextResponse.json({
+        suggestion: suggestion,
+        context: context.length
+      });
+    }
+
+    // Build the conversation context for default behavior
     const conversationHistory = context
       .map(msg => `${msg.sender}: ${msg.message}`)
       .join('\n');
@@ -56,6 +94,8 @@ Guidelines:
 - Be charming and confident but not arrogant
 - Make it memorable and smile-worthy
 
+IMPORTANT: Output ONLY the suggested pickup line. Do not add any explanations, clarifications, or commentary in parentheses. Do not explain your reasoning or add meta-commentary.
+
 Generate a single context-aware pickup line:`
       : `You are a subtle and sophisticated AI wingman helping someone play the "slow game" in flirting. Your goal is to keep conversations flowing naturally while building attraction gradually. Based on the following conversation context, suggest a response that's subtly flirtatious but primarily focused on continuing the conversation.
 
@@ -72,6 +112,8 @@ Guidelines:
 - Be respectful and considerate
 - Be authentic and show genuine curiosity about them
 - Avoid being too forward - play the long game
+
+IMPORTANT: Output ONLY the suggested response. Do not add any explanations, clarifications, or commentary in parentheses. Do not explain your reasoning or add meta-commentary.
 
 Generate a single subtle, conversation-continuing response:`;
 

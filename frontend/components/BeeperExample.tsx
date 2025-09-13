@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { fetchAccounts, fetchChats, fetchMessages } from '@/lib/beeper';
 import type { Account, Chat, Message } from '@/lib/beeper';
 import { sendMessage } from '@/lib/beeper/postMessages';
-import FlirtingWingman from './FlirtingWingman';
+import SimpleWingman from './SimpleWingman';
 
 export default function BeeperExample() {
   const [accessToken, setAccessToken] = useState<string | null>(null);
@@ -269,6 +269,27 @@ export default function BeeperExample() {
       e.preventDefault();
       handleSendMessage();
     }
+  };
+
+  // Handle AI wingman suggestion generation and auto-fill
+  const handleWingmanSuggestion = (suggestion: string) => {
+    setMessageInput(suggestion);
+    // Trigger resize after setting the value
+    setTimeout(() => {
+      const textarea = document.querySelector('textarea') as HTMLTextAreaElement;
+      if (textarea) {
+        textarea.style.height = 'auto';
+        const newHeight = Math.min(textarea.scrollHeight, 120);
+        textarea.style.height = newHeight + 'px';
+        
+        // Enable scrolling if content exceeds max height
+        if (textarea.scrollHeight > 120) {
+          textarea.style.overflowY = 'auto';
+        } else {
+          textarea.style.overflowY = 'hidden';
+        }
+      }
+    }, 50);
   };
 
   return (
@@ -564,19 +585,44 @@ export default function BeeperExample() {
             
             {/* Message Input - Production Design */}
             <div className="p-4 border-t border-gray-800/50 bg-gray-800/30">
-              <div className="flex gap-2">
-                <input
-                  type="text"
+              <div className="flex gap-2 items-end">
+                <textarea
+                  ref={(textarea) => {
+                    if (textarea) {
+                      textarea.addEventListener('input', () => {
+                        textarea.style.height = 'auto';
+                        const newHeight = Math.min(textarea.scrollHeight, 120);
+                        textarea.style.height = newHeight + 'px';
+                        
+                        // Enable scrolling if content exceeds max height
+                        if (textarea.scrollHeight > 120) {
+                          textarea.style.overflowY = 'auto';
+                        } else {
+                          textarea.style.overflowY = 'hidden';
+                        }
+                      });
+                    }
+                  }}
                   placeholder={selectedChat 
                     ? `Send a message to ${((chats.find(c => c.id === selectedChat) as any)?.name || 
                                          (chats.find(c => c.id === selectedChat) as any)?.title || 
                                          'this chat')}...`
                     : 'Select a chat first...'}
                   value={messageInput}
-                  onChange={(e) => setMessageInput(e.target.value)}
+                  onChange={(e) => {
+                    setMessageInput(e.target.value);
+                  }}
                   onKeyPress={selectedChat ? handleKeyPress : undefined}
                   disabled={!selectedChat || sendingMessage}
-                  className="flex-1 px-3 py-2 bg-gray-700/50 border border-gray-600/50 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500/20 disabled:opacity-50 disabled:cursor-not-allowed transition-all text-sm"
+                  rows={1}
+                  className="flex-1 px-3 py-2 bg-gray-700/50 border border-gray-600/50 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500/20 disabled:opacity-50 disabled:cursor-not-allowed text-sm resize-none"
+                  style={{
+                    minHeight: '40px',
+                    height: '40px',
+                    overflowY: 'hidden',
+                    scrollbarWidth: 'thin',
+                    scrollbarColor: '#6B7280 #374151'
+                  }}
                 />
                 <button
                   onClick={handleSendMessage}
@@ -599,9 +645,10 @@ export default function BeeperExample() {
         </div>
       </div>
 
-      {/* AI Flirting Wingman Widget */}
-      <FlirtingWingman 
+      {/* Simple AI Wingman - Bottom Right Corner */}
+      <SimpleWingman 
         messages={messages}
+        onSuggestionGenerated={handleWingmanSuggestion}
       />
     </div>
   );
