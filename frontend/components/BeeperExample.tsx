@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { fetchAccounts, fetchChats, fetchMessages } from '@/lib/beeper';
 import type { Account, Chat, Message } from '@/lib/beeper';
+import FlirtingWingman from './FlirtingWingman';
 
 export default function BeeperExample() {
   const [accessToken, setAccessToken] = useState<string | null>(null);
@@ -235,18 +236,21 @@ export default function BeeperExample() {
           </div>
           
           {/* Status Indicator */}
-          <div className="flex items-center gap-2">
-            {accessToken ? (
-              <>
-                <div className="w-2 h-2 bg-green-400 rounded-full"></div>
-                <span className="text-sm text-green-400">Connected</span>
-              </>
-            ) : (
-              <>
-                <div className="w-2 h-2 bg-red-400 rounded-full"></div>
-                <span className="text-sm text-red-400">Disconnected</span>
-              </>
-            )}
+          <div className="flex items-center gap-4">
+            {/* Connection Status */}
+            <div className="flex items-center gap-2">
+              {accessToken ? (
+                <>
+                  <div className="w-2 h-2 bg-green-400 rounded-full"></div>
+                  <span className="text-sm text-green-400">Connected</span>
+                </>
+              ) : (
+                <>
+                  <div className="w-2 h-2 bg-red-400 rounded-full"></div>
+                  <span className="text-sm text-red-400">Disconnected</span>
+                </>
+              )}
+            </div>
           </div>
         </div>
         
@@ -533,6 +537,11 @@ export default function BeeperExample() {
           )}
         </div>
       </div>
+
+      {/* AI Flirting Wingman Widget */}
+      <FlirtingWingman 
+        messages={messages}
+      />
     </div>
   );
 }
