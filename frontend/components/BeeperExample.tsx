@@ -639,7 +639,7 @@ export default function BeeperExample() {
                 <div className="absolute -bottom-1 -right-1 w-3 h-3 bg-green-400 rounded-full border-2 border-[#1a1a1a] animate-pulse"></div>
               </div>
               <div>
-                <h1 className="text-xl font-semibold text-white">Beeper Desktop API</h1>
+                <h1 className="text-xl font-semibold text-white">Wingman AI</h1>
                 <p className="text-xs text-gray-400">Testing Dashboard v2.0</p>
               </div>
             </div>
