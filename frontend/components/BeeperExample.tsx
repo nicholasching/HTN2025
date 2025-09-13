@@ -5,6 +5,8 @@ import { fetchAccounts, fetchChats, fetchMessages } from '@/lib/beeper';
 import type { Account, Chat, Message } from '@/lib/beeper';
 import { sendMessage } from '@/lib/beeper/postMessages';
 import FlirtingWingman from './FlirtingWingman';
+import ChatSummary from './ChatSummary';
+import ChatSummaryBadge from './ChatSummaryBadge';
 
 export default function BeeperExample() {
   const [accessToken, setAccessToken] = useState<string | null>(null);
@@ -22,6 +24,8 @@ export default function BeeperExample() {
   const [messageInput, setMessageInput] = useState<string>('');
   const [sendingMessage, setSendingMessage] = useState<boolean>(false);
   const [unreadCount, setUnreadCount] = useState<number>(0);
+  const [showSummaryOverlay, setShowSummaryOverlay] = useState<boolean>(false);
+  const [chatSummaries, setChatSummaries] = useState<Record<string, { messages: Message[], unreadCount: number }>>({});
 
   // Load access token from environment variable on component mount
   useEffect(() => {
@@ -59,14 +63,35 @@ export default function BeeperExample() {
     }
   }, [messages, selectedChat]);
 
-  // Calculate unread messages count
+  // Calculate unread messages count and update chat summaries
   useEffect(() => {
     const unreadMessages = messages.filter(message => {
       const messageData = message as any;
       return messageData.isUnread === true;
     });
     setUnreadCount(unreadMessages.length);
-  }, [messages]);
+
+    // Update chat summaries for the current chat
+    if (selectedChat) {
+      setChatSummaries(prev => ({
+        ...prev,
+        [selectedChat]: {
+          messages: messages,
+          unreadCount: unreadMessages.length
+        }
+      }));
+    }
+  }, [messages, selectedChat]);
+
+  // Show summary overlay when a chat is first opened
+  useEffect(() => {
+    if (selectedChat && messages.length > 0) {
+      const chatSummary = chatSummaries[selectedChat];
+      if (chatSummary && chatSummary.unreadCount > 0) {
+        setShowSummaryOverlay(true);
+      }
+    }
+  }, [selectedChat, messages, chatSummaries]);
 
   // Full workflow function that mimics test.ts behavior
   const runFullWorkflow = async (token: string) => {
@@ -166,6 +191,7 @@ export default function BeeperExample() {
       setMessages([]);
       setSelectedChat('');
       setSelectedAccount(accountID);
+      setChatSummaries({});
     }
 
     setLoading(true);
@@ -270,6 +296,12 @@ export default function BeeperExample() {
       handleSendMessage();
     }
   };
+
+  // Get current chat data
+  const currentChat = chats.find(chat => chat.id === selectedChat);
+  const currentChatName = currentChat ? 
+    (currentChat as any).name || (currentChat as any).title || 'Unnamed Chat' : 
+    'Unknown Chat';
 
   return (
     <div className="min-h-screen bg-[#0f0f0f] text-gray-100">
@@ -412,6 +444,7 @@ export default function BeeperExample() {
                   const chatData = chat as any;
                   const chatName = chatData.name || chatData.title || 'Unnamed Chat';
                   const lastMessage = chatData.lastMessage?.text || chatData.lastMessage?.content;
+                  const chatSummary = chatSummaries[chat.id];
                   
                   return (
                     <div
@@ -445,6 +478,16 @@ export default function BeeperExample() {
                           )}
                         </div>
                       </div>
+                      
+                      {/* AI Summary Badge */}
+                      {chatSummary && chatSummary.unreadCount > 0 && (
+                        <ChatSummaryBadge
+                          chatId={chat.id}
+                          chatName={chatName}
+                          messages={chatSummary.messages}
+                          unreadCount={chatSummary.unreadCount}
+                        />
+                      )}
                     </div>
                     );
                   })
@@ -602,6 +645,16 @@ export default function BeeperExample() {
       {/* AI Flirting Wingman Widget */}
       <FlirtingWingman 
         messages={messages}
+      />
+
+      {/* AI Summary Overlay */}
+      <ChatSummary
+        chatId={selectedChat}
+        chatName={currentChatName}
+        messages={messages}
+        unreadCount={unreadCount}
+        isOpen={showSummaryOverlay}
+        onClose={() => setShowSummaryOverlay(false)}
       />
     </div>
   );
