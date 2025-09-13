@@ -13,6 +13,17 @@ export async function GET(request: NextRequest) {
     const params = new URLSearchParams();
     if (searchParams.get('limit')) params.set('limit', searchParams.get('limit')!);
     if (searchParams.get('chatIDs')) params.set('chatIDs', searchParams.get('chatIDs')!);
+    if (searchParams.get('cursor')) params.set('cursor', searchParams.get('cursor')!);
+    if (searchParams.get('direction')) params.set('direction', searchParams.get('direction')!);
+    if (searchParams.get('accountIDs')) params.set('accountIDs', searchParams.get('accountIDs')!);
+    if (searchParams.get('chatType')) params.set('chatType', searchParams.get('chatType')!);
+    if (searchParams.get('dateAfter')) params.set('dateAfter', searchParams.get('dateAfter')!);
+    if (searchParams.get('dateBefore')) params.set('dateBefore', searchParams.get('dateBefore')!);
+    if (searchParams.get('excludeLowPriority')) params.set('excludeLowPriority', searchParams.get('excludeLowPriority')!);
+    if (searchParams.get('includeMuted')) params.set('includeMuted', searchParams.get('includeMuted')!);
+    if (searchParams.get('mediaTypes')) params.set('mediaTypes', searchParams.get('mediaTypes')!);
+    if (searchParams.get('query')) params.set('query', searchParams.get('query')!);
+    if (searchParams.get('sender')) params.set('sender', searchParams.get('sender')!);
 
     // Try different possible Beeper API URLs (23373 is the current default)
     const possibleUrls = [

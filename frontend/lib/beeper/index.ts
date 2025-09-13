@@ -13,7 +13,7 @@ export { fetchAllChats, fetchChats, getFirstChat } from './fetchChats';
 export type { Chat, ChatSearchOptions } from './fetchChats';
 
 // Export message functions
-export { fetchMessages, formatMessage, displayMessages } from './fetchMessages';
+export { fetchMessages, fetchMessagesLimited, formatMessage, displayMessages } from './fetchMessages';
 export type { Message, MessageSearchOptions } from './fetchMessages';
 
 // Export message sending functions
