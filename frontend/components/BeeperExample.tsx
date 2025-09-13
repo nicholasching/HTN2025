@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { fetchAccounts, fetchChats, fetchMessages } from '@/lib/beeper';
 import type { Account, Chat, Message } from '@/lib/beeper';
 import { sendMessage } from '@/lib/beeper/postMessages';
-import FlirtingWingman from './FlirtingWingman';
+import SimpleWingman from './SimpleWingman';
 import ChatSummary from './ChatSummary';
 import ChatSummaryBadge from './ChatSummaryBadge';
 import HoverableText from './HoverableText';
@@ -324,6 +324,27 @@ export default function BeeperExample() {
       e.preventDefault();
       handleSendMessage();
     }
+  };
+
+  // Handle AI wingman suggestion generation and auto-fill
+  const handleWingmanSuggestion = (suggestion: string) => {
+    setMessageInput(suggestion);
+    // Trigger resize after setting the value
+    setTimeout(() => {
+      const textarea = document.querySelector('textarea') as HTMLTextAreaElement;
+      if (textarea) {
+        textarea.style.height = 'auto';
+        const newHeight = Math.min(textarea.scrollHeight, 120);
+        textarea.style.height = newHeight + 'px';
+        
+        // Enable scrolling if content exceeds max height
+        if (textarea.scrollHeight > 120) {
+          textarea.style.overflowY = 'auto';
+        } else {
+          textarea.style.overflowY = 'hidden';
+        }
+      }
+    }, 50);
   };
 
   // Generate AI response using Cohere API
@@ -989,63 +1010,50 @@ export default function BeeperExample() {
                        </div>
                      </div>
                    );
-                  return (
-                    <div key={message.id || index} className="p-3 hover:bg-gray-750 transition-colors border-b border-gray-700/50">
-                      <div className="flex items-start gap-3">
-                        {/* Sender Avatar */}
-                        <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${
-                          isMe ? 'bg-purple-600' : 'bg-gradient-to-br from-blue-500 to-purple-600'
-                        }`}>
-                          {senderName.charAt(0).toUpperCase()}
-                        </div>
-                        
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 mb-1">
-                            <span className={`text-sm font-medium ${isMe ? 'text-purple-400' : 'text-gray-300'}`}>
-                              {senderName}
-                            </span>
-                            <span className="text-xs text-gray-500">
-                              {formattedTime}
-                            </span>
-                            {isMe && (
-                              <span className="text-xs bg-purple-600 text-white px-2 py-0.5 rounded-full">
-                                You
-                              </span>
-                            )}
-                          </div>
-                          <HoverableText 
-                            text={content}
-                            accountId={selectedAccount}
-                            chatId={selectedChat}
-                            className="text-sm text-gray-200 leading-relaxed break-words"
-                          />
-                          {/* Show message metadata on hover */}
-                          <div className="text-xs text-gray-500 mt-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                            ID: {message.id || messageData.messageID || messageData.guid}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  );
                   })
                 )}
             </div>
             
             {/* Message Input - Production Design */}
             <div className="p-4 border-t border-gray-800/50 bg-gray-800/30">
-              <div className="flex gap-2">
-                <input
-                  type="text"
+              <div className="flex gap-2 items-end">
+                <textarea
+                  ref={(textarea) => {
+                    if (textarea) {
+                      textarea.addEventListener('input', () => {
+                        textarea.style.height = 'auto';
+                        const newHeight = Math.min(textarea.scrollHeight, 120);
+                        textarea.style.height = newHeight + 'px';
+                        
+                        // Enable scrolling if content exceeds max height
+                        if (textarea.scrollHeight > 120) {
+                          textarea.style.overflowY = 'auto';
+                        } else {
+                          textarea.style.overflowY = 'hidden';
+                        }
+                      });
+                    }
+                  }}
                   placeholder={selectedChat 
                     ? `Send a message to ${((chats.find(c => c.id === selectedChat) as any)?.name || 
                                          (chats.find(c => c.id === selectedChat) as any)?.title || 
                                          'this chat')}...`
                     : 'Select a chat first...'}
                   value={messageInput}
-                  onChange={(e) => setMessageInput(e.target.value)}
+                  onChange={(e) => {
+                    setMessageInput(e.target.value);
+                  }}
                   onKeyPress={selectedChat ? handleKeyPress : undefined}
                   disabled={!selectedChat || sendingMessage}
-                  className="flex-1 px-3 py-2 bg-gray-700/50 border border-gray-600/50 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500/20 disabled:opacity-50 disabled:cursor-not-allowed transition-all text-sm"
+                  rows={1}
+                  className="flex-1 px-3 py-2 bg-gray-700/50 border border-gray-600/50 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500/20 disabled:opacity-50 disabled:cursor-not-allowed text-sm resize-none"
+                  style={{
+                    minHeight: '40px',
+                    height: '40px',
+                    overflowY: 'hidden',
+                    scrollbarWidth: 'thin',
+                    scrollbarColor: '#6B7280 #374151'
+                  }}
                 />
                 <button
                   onClick={handleSendMessage}
@@ -1156,12 +1164,12 @@ export default function BeeperExample() {
          </div>
        )}
 
-       {/* AI Flirting Wingman Widget */}
-       <FlirtingWingman 
-         messages={messages}
-       />
-      {
-      /* AI Summary Overlay */}
+<SimpleWingman 
+        messages={messages}
+        onSuggestionGenerated={handleWingmanSuggestion}
+></SimpleWingman>
+{
+    /* AI Summary Overlay */}
       <ChatSummary
         chatId={selectedChat}
         chatName={currentChatName}
