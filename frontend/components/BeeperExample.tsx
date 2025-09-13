@@ -436,6 +436,12 @@ export default function BeeperExample() {
         const newHeight = Math.min(textarea.scrollHeight, 120);
         textarea.style.height = newHeight + 'px';
         
+        // Update button height to match textarea
+        const sendButton = textarea.parentElement?.querySelector('button') as HTMLButtonElement;
+        if (sendButton) {
+          sendButton.style.height = newHeight + 'px';
+        }
+        
         if (textarea.scrollHeight > 120) {
           textarea.style.overflowY = 'auto';
         } else {
@@ -455,6 +461,12 @@ export default function BeeperExample() {
         textarea.style.height = 'auto';
         const newHeight = Math.min(textarea.scrollHeight, 120);
         textarea.style.height = newHeight + 'px';
+        
+        // Update button height to match textarea
+        const sendButton = textarea.parentElement?.querySelector('button') as HTMLButtonElement;
+        if (sendButton) {
+          sendButton.style.height = newHeight + 'px';
+        }
         
         // Enable scrolling if content exceeds max height
         if (textarea.scrollHeight > 120) {
@@ -1255,30 +1267,11 @@ Generate a natural response:`,
               
               {showDraftIndicator && !isGeneratingDraft && (
                 <div className="mb-3 p-3 bg-blue-500/10 border border-blue-500/30 rounded-lg">
-                  <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
                     <div className="flex items-center gap-2">
                       <div className="w-2 h-2 bg-blue-400 rounded-full animate-pulse"></div>
                        <span className="text-sm text-blue-300 font-medium">AI Response Draft</span>
                       <span className="text-xs text-blue-400/70">Ctrl+Space to accept</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={acceptAutoDraft}
-                        className="px-2 py-1 text-xs bg-blue-500/20 text-blue-300 hover:bg-blue-500/30 rounded transition-colors"
-                      >
-                        ✓ Accept
-                      </button>
-                       <button
-                         onClick={() => {
-                           setShowDraftIndicator(false);
-                           setAutoDraftResponse('');
-                           setAiNotConfident(false);
-                           draftGeneratedForChat.current = ''; // Reset so we can generate a new draft if needed
-                         }}
-                         className="text-xs text-blue-400 hover:text-blue-300 transition-colors"
-                       >
-                         ✕ Dismiss
-                       </button>
                     </div>
                   </div>
                   <div className="mt-2 text-sm text-gray-300 italic">
@@ -1308,6 +1301,12 @@ Generate a natural response:`,
                         textarea.style.height = 'auto';
                         const newHeight = Math.min(textarea.scrollHeight, 120);
                         textarea.style.height = newHeight + 'px';
+                        
+                        // Update button height to match textarea
+                        const sendButton = textarea.parentElement?.querySelector('button') as HTMLButtonElement;
+                        if (sendButton) {
+                          sendButton.style.height = newHeight + 'px';
+                        }
                         
                         // Enable scrolling if content exceeds max height
                         if (textarea.scrollHeight > 120) {
@@ -1354,7 +1353,8 @@ Generate a natural response:`,
                 <button
                   onClick={handleSendMessage}
                   disabled={!selectedChat || sendingMessage || !messageInput.trim()}
-                  className="px-4 py-2 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-lg hover:from-purple-700 hover:to-pink-700 focus:outline-none focus:ring-2 focus:ring-purple-500/30 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                  className="px-4 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-lg hover:from-purple-700 hover:to-pink-700 focus:outline-none focus:ring-2 focus:ring-purple-500/30 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center"
+                  style={{ height: '40px' }}
                 >
                   {sendingMessage ? (
                     <div className="flex items-center gap-1">
