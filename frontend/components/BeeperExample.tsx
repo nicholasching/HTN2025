@@ -8,6 +8,7 @@ import FlirtingWingman from './FlirtingWingman';
 // Remove ChatSummary import since we're deleting that file
 // import ChatSummary from './ChatSummary';
 import ChatSummaryBadge from './ChatSummaryBadge';
+import HoverableText from './HoverableText';
 
 export default function BeeperExample() {
   const [accessToken, setAccessToken] = useState<string | null>(null);
@@ -593,6 +594,44 @@ export default function BeeperExample() {
                        </div>
                      </div>
                    );
+                  return (
+                    <div key={message.id || index} className="p-3 hover:bg-gray-750 transition-colors border-b border-gray-700/50">
+                      <div className="flex items-start gap-3">
+                        {/* Sender Avatar */}
+                        <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${
+                          isMe ? 'bg-purple-600' : 'bg-gradient-to-br from-blue-500 to-purple-600'
+                        }`}>
+                          {senderName.charAt(0).toUpperCase()}
+                        </div>
+                        
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className={`text-sm font-medium ${isMe ? 'text-purple-400' : 'text-gray-300'}`}>
+                              {senderName}
+                            </span>
+                            <span className="text-xs text-gray-500">
+                              {formattedTime}
+                            </span>
+                            {isMe && (
+                              <span className="text-xs bg-purple-600 text-white px-2 py-0.5 rounded-full">
+                                You
+                              </span>
+                            )}
+                          </div>
+                          <HoverableText 
+                            text={content}
+                            accountId={selectedAccount}
+                            chatId={selectedChat}
+                            className="text-sm text-gray-200 leading-relaxed break-words"
+                          />
+                          {/* Show message metadata on hover */}
+                          <div className="text-xs text-gray-500 mt-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            ID: {message.id || messageData.messageID || messageData.guid}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
                   })
                 )}
             </div>
