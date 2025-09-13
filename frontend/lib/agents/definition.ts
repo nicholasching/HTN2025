@@ -171,6 +171,7 @@ async function defineTermsWithCohere(
 
   const cohere = new CohereClient({
     token: cohereApiKey,
+    timeout: 30000, // 30 second timeout
   });
 
   const prompt = `You are a contextual definition assistant. Your job is to define terms based on how they are used in the specific message context provided.

@@ -7,8 +7,8 @@ import { sendMessage } from '@/lib/beeper/postMessages';
 import SimpleWingman from './SimpleWingman';
 // Remove ChatSummary import since we're deleting that file
 // import ChatSummary from './ChatSummary';
-import ChatSummaryBadge from './ChatSummaryBadge';
 import HoverableText from './HoverableText';
+import ChatSummaryOverlay from './ChatSummaryOverlay';
 
 export default function BeeperExample() {
   const [accessToken, setAccessToken] = useState<string | null>(null);
@@ -34,9 +34,8 @@ export default function BeeperExample() {
   const [agentInstructionsMap, setAgentInstructionsMap] = useState<Record<string, string>>({});
   const [isGeneratingResponse, setIsGeneratingResponse] = useState<boolean>(false);
   const checkTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const [showSummaryOverlay, setShowSummaryOverlay] = useState<boolean>(false);
+  const [dismissedSummaries, setDismissedSummaries] = useState<Set<string>>(new Set());
   const [chatSummaries, setChatSummaries] = useState<Record<string, { messages: Message[], unreadCount: number }>>({});
-  const [expandedSummaryId, setExpandedSummaryId] = useState<string | null>(null);
 
   // Load access token from environment variable on component mount
   useEffect(() => {
@@ -624,6 +623,13 @@ export default function BeeperExample() {
     setShowAgentSettings(false);
     setAgentInstructions('');
   };
+
+  // Handle dismissing summary overlay
+  const handleDismissSummary = () => {
+    if (selectedChat) {
+      setDismissedSummaries(prev => new Set(prev).add(selectedChat));
+    }
+  };
   // Get current chat data
   const currentChat = chats.find(chat => chat.id === selectedChat);
   const currentChatName = currentChat ? 
@@ -806,19 +812,6 @@ export default function BeeperExample() {
                         </div>
                       </div>
                       
-                      {/* AI Summary Badge */}
-                      {chatSummary && chatSummary.unreadCount > 0 && (
-                        <ChatSummaryBadge
-                          chatId={chat.id}
-                          chatName={chatName}
-                          messages={chatSummary.messages}
-                          unreadCount={chatSummary.unreadCount}
-                          isExpanded={expandedSummaryId === chat.id}
-                          onToggle={() => setExpandedSummaryId(
-                            expandedSummaryId === chat.id ? null : chat.id
-                          )}
-                        />
-                      )}
                     </div>
                     );
                   })
@@ -918,6 +911,17 @@ export default function BeeperExample() {
                  </div>
                </div>
              )}
+             
+            {/* Chat Summary Overlay */}
+            {selectedChat && !dismissedSummaries.has(selectedChat) && (
+              <ChatSummaryOverlay
+                chatId={selectedChat}
+                chatName={currentChatName}
+                messages={messages}
+                unreadCount={unreadCount}
+                onDismiss={handleDismissSummary}
+              />
+            )}
              
             <div id="messages-container" className="flex-1 overflow-y-auto space-y-1 min-h-0">
                 {loading && selectedChat && messages.length === 0 ? (
@@ -1165,8 +1169,7 @@ export default function BeeperExample() {
         messages={messages}
         onSuggestionGenerated={handleWingmanSuggestion}
 ></SimpleWingman>
-{
-    /* Remove the ChatSummary popup component */}
+    {/* Remove the ChatSummary popup component */}
       {/* <ChatSummary
         chatId={selectedChat}
         chatName={currentChatName}

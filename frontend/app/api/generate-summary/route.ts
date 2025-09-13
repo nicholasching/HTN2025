@@ -68,13 +68,14 @@ Guidelines:
 
 Generate a brief summary:`;
 
-    // Use Cohere's REST API
+    // Use Cohere's REST API with longer timeout
     const response = await fetch('https://api.cohere.ai/v1/generate', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${apiKey}`,
         'Content-Type': 'application/json',
       },
+      signal: AbortSignal.timeout(30000), // 30 second timeout
       body: JSON.stringify({
         model: 'command',
         prompt: prompt,

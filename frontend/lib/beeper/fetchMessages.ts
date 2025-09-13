@@ -75,7 +75,9 @@ export async function fetchMessages(
     if (options.query) params.set('query', options.query);
     if (options.sender) params.set('sender', options.sender);
     
-    const response = await fetch(`/api/beeper/messages?${params}`, {
+    // Use full URL when called from server-side, relative URL for client-side
+    const baseUrl = typeof window === 'undefined' ? 'http://localhost:3000' : '';
+    const response = await fetch(`${baseUrl}/api/beeper/messages?${params}`, {
       method: 'GET',
       headers: {
         'Authorization': `Bearer ${accessToken}`,
