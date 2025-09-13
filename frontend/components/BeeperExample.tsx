@@ -977,11 +977,14 @@ export default function BeeperExample() {
                                </span>
                              )}
                            </div>
-                           <div className={`text-sm leading-relaxed break-words ${
-                             isUnread ? 'text-white font-medium' : 'text-gray-200'
-                           }`}>
-                             {content}
-                           </div>
+                           <HoverableText 
+                             text={content}
+                             accountId={selectedAccount}
+                             chatId={selectedChat}
+                             className={`text-sm leading-relaxed break-words ${
+                               isUnread ? 'text-white font-medium' : 'text-gray-200'
+                             }`}
+                           />
                          </div>
                        </div>
                      </div>

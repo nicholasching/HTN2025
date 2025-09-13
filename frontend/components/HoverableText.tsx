@@ -214,10 +214,7 @@ export default function HoverableText({
 
     // Fetch definition with a slight delay to avoid excessive API calls
     timeoutRef.current = setTimeout(async () => {
-      console.log('Fetching definition for term:', term);
-      console.log('Account ID:', accountId, 'Chat ID:', chatId);
       const definition = await fetchDefinition(term);
-      console.log('Final definition result:', definition);
       setHoverState(prev => ({
         ...prev,
         definition,
@@ -270,7 +267,7 @@ export default function HoverableText({
             return (
               <span
                 key={index}
-                className="cursor-help underline decoration-dotted decoration-purple-400 hover:decoration-solid hover:bg-purple-900/20 transition-all duration-200 rounded px-0.5"
+                className="cursor-help bg-gradient-to-r from-purple-500/20 to-blue-500/20 border-b-2 border-purple-400/60 hover:border-purple-300 hover:from-purple-500/30 hover:to-blue-500/30 hover:shadow-lg hover:shadow-purple-500/20 transition-all duration-300 rounded-sm px-1 py-0.5 font-medium text-purple-100 hover:text-white hover:scale-105 transform"
                 onMouseEnter={(e) => handleMouseEnter(e, part)}
                 onMouseLeave={handleMouseLeave}
               >
