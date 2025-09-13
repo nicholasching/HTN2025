@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import type { Message } from '@/lib/beeper';
 
 interface ChatSummaryBadgeProps {
@@ -8,6 +8,9 @@ interface ChatSummaryBadgeProps {
   chatName: string;
   messages: Message[];
   unreadCount: number;
+  isExpanded: boolean;
+  onToggle: () => void;
+  onSummaryGenerated?: (summary: string) => void;
 }
 
 interface SummaryData {
@@ -23,18 +26,19 @@ export default function ChatSummaryBadge({
   chatId, 
   chatName, 
   messages, 
-  unreadCount 
+  unreadCount,
+  isExpanded,
+  onToggle,
+  onSummaryGenerated
 }: ChatSummaryBadgeProps) {
   const [summary, setSummary] = useState<string>('');
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
-  const [isHovered, setIsHovered] = useState<boolean>(false);
-  const hasGeneratedRef = useRef<boolean>(false);
-  const hideTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const [hasGenerated, setHasGenerated] = useState<boolean>(false);
 
-  // Only generate summary on hover and if not already generated
+  // Generate summary when expanded and not already generated
   useEffect(() => {
-    if (!isHovered || unreadCount === 0 || messages.length === 0) {
+    if (!isExpanded || unreadCount === 0 || messages.length === 0 || hasGenerated) {
       return;
     }
 
@@ -44,16 +48,12 @@ export default function ChatSummaryBadge({
     
     if (cached) {
       setSummary(cached);
-      return;
-    }
-
-    // Prevent duplicate calls
-    if (hasGeneratedRef.current) {
+      setHasGenerated(true);
+      onSummaryGenerated?.(cached);
       return;
     }
 
     const generateSummary = async () => {
-      hasGeneratedRef.current = true;
       setLoading(true);
       setError(null);
 
@@ -116,81 +116,66 @@ export default function ChatSummaryBadge({
         summaryCache.set(cacheKey, data.summary);
         
         setSummary(data.summary);
+        setHasGenerated(true);
+        onSummaryGenerated?.(data.summary);
       } catch (error) {
         console.error('Error generating summary:', error);
         setError(error instanceof Error ? error.message : 'Failed to generate summary');
         setSummary('');
       } finally {
         setLoading(false);
-        hasGeneratedRef.current = false;
       }
     };
 
     generateSummary();
-  }, [isHovered, chatId, unreadCount]);
-
-  const handleMouseEnter = () => {
-    // Clear any pending hide timeout
-    if (hideTimeoutRef.current) {
-      clearTimeout(hideTimeoutRef.current);
-      hideTimeoutRef.current = null;
-    }
-    setIsHovered(true);
-  };
-
-  const handleMouseLeave = () => {
-    // Add a small delay before hiding to prevent flickering when moving between chats
-    hideTimeoutRef.current = setTimeout(() => {
-      setIsHovered(false);
-    }, 150); // 150ms delay
-  };
-
-  // Cleanup timeout on unmount
-  useEffect(() => {
-    return () => {
-      if (hideTimeoutRef.current) {
-        clearTimeout(hideTimeoutRef.current);
-      }
-    };
-  }, []);
+  }, [isExpanded, chatId, unreadCount, hasGenerated]);
 
   // Only show if there are unread messages
   if (unreadCount === 0) return null;
 
   return (
-    <div 
-      className="mt-2 p-2 bg-blue-500/10 border border-blue-500/30 rounded-lg cursor-pointer hover:bg-blue-500/20 transition-colors"
-      onMouseEnter={handleMouseEnter}
-      onMouseLeave={handleMouseLeave}
-    >
-      <div className="flex items-start gap-2">
-        <div className="w-4 h-4 bg-blue-500 rounded-full flex-shrink-0 mt-0.5"></div>
-        <div className="flex-1 min-w-0">
-          <div className="text-xs text-blue-300 font-medium mb-1">
-            AI Summary ({unreadCount} unread) {isHovered ? '▼' : '▶'}
+    <div className="mt-2">
+      {/* Summary Header - Always visible */}
+      <div 
+        className="p-2 bg-blue-500/10 border border-blue-500/30 rounded-lg cursor-pointer hover:bg-blue-500/20 transition-all duration-200 ease-in-out"
+        onClick={onToggle}
+      >
+        <div className="flex items-center gap-2">
+          <div className="w-4 h-4 bg-blue-500 rounded-full flex-shrink-0"></div>
+          <div className="flex-1">
+            <span className="text-xs text-blue-300 font-medium">
+              AI Summary ({unreadCount} unread)
+            </span>
           </div>
-          
-          {/* Only show summary content when hovered */}
-          {isHovered && (
-            <div className="mt-1">
-              {loading ? (
-                <div className="flex items-center gap-2">
-                  <div className="w-3 h-3 border border-blue-400 border-t-transparent rounded-full animate-spin"></div>
-                  <span className="text-xs text-blue-400">Generating...</span>
-                </div>
-              ) : error ? (
-                <div className="text-xs text-red-400">
-                  Unable to generate summary
-                </div>
-              ) : summary ? (
-                <div className="text-xs text-gray-300 leading-relaxed">
-                  {summary}
-                </div>
-              ) : null}
+          <div className="text-blue-300 text-xs">
+            {isExpanded ? '▼' : '▶'}
+          </div>
+        </div>
+      </div>
+      
+      {/* Summary Content - Only visible when expanded */}
+      {isExpanded && (
+        <div className="mt-1 p-2 bg-blue-500/5 border border-blue-500/20 rounded-lg">
+          {loading ? (
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 border border-blue-400 border-t-transparent rounded-full animate-spin"></div>
+              <span className="text-xs text-blue-400">Generating...</span>
+            </div>
+          ) : error ? (
+            <div className="text-xs text-red-400">
+              Unable to generate summary
+            </div>
+          ) : summary ? (
+            <div className="text-xs text-gray-300 leading-relaxed">
+              {summary}
+            </div>
+          ) : (
+            <div className="text-xs text-blue-400">
+              Click to generate summary...
             </div>
           )}
         </div>
-      </div>
+      )}
     </div>
   );
 }

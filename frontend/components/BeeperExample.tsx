@@ -29,6 +29,7 @@ export default function BeeperExample() {
   // Remove showSummaryOverlay state since ChatSummary component is being deleted
   // const [showSummaryOverlay, setShowSummaryOverlay] = useState<boolean>(false);
   const [chatSummaries, setChatSummaries] = useState<Record<string, { messages: Message[], unreadCount: number }>>({});
+  const [expandedSummaryId, setExpandedSummaryId] = useState<string | null>(null);
 
   // Load access token from environment variable on component mount
   useEffect(() => {
@@ -227,14 +228,15 @@ export default function BeeperExample() {
       setTimeout(scrollToBottom, 100);
       
       // Mark messages as read after a short delay (simulating read receipt)
-      setTimeout(() => {
-        setMessages(prevMessages => 
-          prevMessages.map(message => ({
-            ...message,
-            isUnread: false
-          }))
-        );
-      }, 2000);
+      // Commented out to prevent AI summaries from disappearing
+      // setTimeout(() => {
+      //   setMessages(prevMessages => 
+      //     prevMessages.map(message => ({
+      //       ...message,
+      //       isUnread: false
+      //     }))
+      //   );
+      // }, 2000);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       setError(`Failed to fetch messages: ${errorMessage}`);
@@ -479,6 +481,10 @@ export default function BeeperExample() {
                           chatName={chatName}
                           messages={chatSummary.messages}
                           unreadCount={chatSummary.unreadCount}
+                          isExpanded={expandedSummaryId === chat.id}
+                          onToggle={() => setExpandedSummaryId(
+                            expandedSummaryId === chat.id ? null : chat.id
+                          )}
                         />
                       )}
                     </div>
