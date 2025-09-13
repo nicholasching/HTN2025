@@ -8,6 +8,7 @@ import SimpleWingman from './SimpleWingman';
 import ChatSummary from './ChatSummary';
 import ChatSummaryBadge from './ChatSummaryBadge';
 import HoverableText from './HoverableText';
+import ProfessionalTextFloatingWidget from './ProfessionalTextFloatingWidget';
 
 export default function BeeperExample() {
   const [accessToken, setAccessToken] = useState<string | null>(null);
@@ -1070,6 +1071,7 @@ export default function BeeperExample() {
                   )}
                 </button>
               </div>
+              
             </div>
           </div>
           
@@ -1168,6 +1170,12 @@ export default function BeeperExample() {
         messages={messages}
         onSuggestionGenerated={handleWingmanSuggestion}
 ></SimpleWingman>
+
+<ProfessionalTextFloatingWidget
+        messageInput={messageInput}
+        onTextUpdate={setMessageInput}
+        disabled={!selectedChat || sendingMessage}
+></ProfessionalTextFloatingWidget>
 {
     /* AI Summary Overlay */}
       <ChatSummary
