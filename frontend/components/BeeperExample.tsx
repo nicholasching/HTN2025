@@ -5,6 +5,9 @@ import { fetchAccounts, fetchChats, fetchMessages } from '@/lib/beeper';
 import type { Account, Chat, Message } from '@/lib/beeper';
 import { sendMessage } from '@/lib/beeper/postMessages';
 import FlirtingWingman from './FlirtingWingman';
+import ChatSummary from './ChatSummary';
+import ChatSummaryBadge from './ChatSummaryBadge';
+import HoverableText from './HoverableText';
 
 export default function BeeperExample() {
   const [accessToken, setAccessToken] = useState<string | null>(null);
@@ -30,6 +33,8 @@ export default function BeeperExample() {
   const [agentInstructionsMap, setAgentInstructionsMap] = useState<Record<string, string>>({});
   const [isGeneratingResponse, setIsGeneratingResponse] = useState<boolean>(false);
   const checkTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const [showSummaryOverlay, setShowSummaryOverlay] = useState<boolean>(false);
+  const [chatSummaries, setChatSummaries] = useState<Record<string, { messages: Message[], unreadCount: number }>>({});
 
   // Load access token from environment variable on component mount
   useEffect(() => {
@@ -87,14 +92,35 @@ export default function BeeperExample() {
     }
   }, [messages, selectedChat]);
 
-  // Calculate unread messages count
+  // Calculate unread messages count and update chat summaries
   useEffect(() => {
     const unreadMessages = messages.filter(message => {
       const messageData = message as any;
       return messageData.isUnread === true;
     });
     setUnreadCount(unreadMessages.length);
-  }, [messages]);
+
+    // Update chat summaries for the current chat
+    if (selectedChat) {
+      setChatSummaries(prev => ({
+        ...prev,
+        [selectedChat]: {
+          messages: messages,
+          unreadCount: unreadMessages.length
+        }
+      }));
+    }
+  }, [messages, selectedChat]);
+
+  // Show summary overlay when a chat is first opened
+  useEffect(() => {
+    if (selectedChat && messages.length > 0) {
+      const chatSummary = chatSummaries[selectedChat];
+      if (chatSummary && chatSummary.unreadCount > 0) {
+        setShowSummaryOverlay(true);
+      }
+    }
+  }, [selectedChat, messages, chatSummaries]);
 
   // Full workflow function that mimics test.ts behavior
   const runFullWorkflow = async (token: string) => {
@@ -194,6 +220,7 @@ export default function BeeperExample() {
       setMessages([]);
       setSelectedChat('');
       setSelectedAccount(accountID);
+      setChatSummaries({});
     }
 
     setLoading(true);
@@ -583,6 +610,11 @@ export default function BeeperExample() {
     setShowAgentSettings(false);
     setAgentInstructions('');
   };
+  // Get current chat data
+  const currentChat = chats.find(chat => chat.id === selectedChat);
+  const currentChatName = currentChat ? 
+    (currentChat as any).name || (currentChat as any).title || 'Unnamed Chat' : 
+    'Unknown Chat';
 
   return (
     <div className="min-h-screen bg-[#0f0f0f] text-gray-100">
@@ -725,6 +757,7 @@ export default function BeeperExample() {
                   const chatData = chat as any;
                   const chatName = chatData.name || chatData.title || 'Unnamed Chat';
                   const lastMessage = chatData.lastMessage?.text || chatData.lastMessage?.content;
+                  const chatSummary = chatSummaries[chat.id];
                   
                   return (
                     <div
@@ -758,6 +791,16 @@ export default function BeeperExample() {
                           )}
                         </div>
                       </div>
+                      
+                      {/* AI Summary Badge */}
+                      {chatSummary && chatSummary.unreadCount > 0 && (
+                        <ChatSummaryBadge
+                          chatId={chat.id}
+                          chatName={chatName}
+                          messages={chatSummary.messages}
+                          unreadCount={chatSummary.unreadCount}
+                        />
+                      )}
                     </div>
                     );
                   })
@@ -943,6 +986,44 @@ export default function BeeperExample() {
                        </div>
                      </div>
                    );
+                  return (
+                    <div key={message.id || index} className="p-3 hover:bg-gray-750 transition-colors border-b border-gray-700/50">
+                      <div className="flex items-start gap-3">
+                        {/* Sender Avatar */}
+                        <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${
+                          isMe ? 'bg-purple-600' : 'bg-gradient-to-br from-blue-500 to-purple-600'
+                        }`}>
+                          {senderName.charAt(0).toUpperCase()}
+                        </div>
+                        
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className={`text-sm font-medium ${isMe ? 'text-purple-400' : 'text-gray-300'}`}>
+                              {senderName}
+                            </span>
+                            <span className="text-xs text-gray-500">
+                              {formattedTime}
+                            </span>
+                            {isMe && (
+                              <span className="text-xs bg-purple-600 text-white px-2 py-0.5 rounded-full">
+                                You
+                              </span>
+                            )}
+                          </div>
+                          <HoverableText 
+                            text={content}
+                            accountId={selectedAccount}
+                            chatId={selectedChat}
+                            className="text-sm text-gray-200 leading-relaxed break-words"
+                          />
+                          {/* Show message metadata on hover */}
+                          <div className="text-xs text-gray-500 mt-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            ID: {message.id || messageData.messageID || messageData.guid}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
                   })
                 )}
             </div>
@@ -1076,6 +1157,16 @@ export default function BeeperExample() {
        <FlirtingWingman 
          messages={messages}
        />
-     </div>
-   );
- }
+      {
+      /* AI Summary Overlay */}
+      <ChatSummary
+        chatId={selectedChat}
+        chatName={currentChatName}
+        messages={messages}
+        unreadCount={unreadCount}
+        isOpen={showSummaryOverlay}
+        onClose={() => setShowSummaryOverlay(false)}
+      />
+    </div>
+  );
+}
