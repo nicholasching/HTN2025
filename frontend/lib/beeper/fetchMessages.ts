@@ -59,12 +59,16 @@ export async function fetchMessages(
     const params = new URLSearchParams();
     params.set('limit', String(Math.min(limit * 5, 500))); // Get more messages but respect API limit
     
+    // Set direction to 'before' to get the most recent messages (newest first)
+    // The API returns messages in reverse chronological order by default
+    params.set('direction', 'before');
+    
     if (options.accountIDs) params.set('accountIDs', JSON.stringify(options.accountIDs));
     if (options.chatType) params.set('chatType', options.chatType);
     if (options.cursor) params.set('cursor', options.cursor);
     if (options.dateAfter) params.set('dateAfter', options.dateAfter);
     if (options.dateBefore) params.set('dateBefore', options.dateBefore);
-    if (options.direction) params.set('direction', options.direction);
+    if (options.direction) params.set('direction', options.direction); // Override if specified
     if (options.excludeLowPriority !== undefined) params.set('excludeLowPriority', String(options.excludeLowPriority));
     if (options.includeMuted !== undefined) params.set('includeMuted', String(options.includeMuted));
     if (options.mediaTypes) params.set('mediaTypes', JSON.stringify(options.mediaTypes));
@@ -90,10 +94,24 @@ export async function fetchMessages(
     // Filter by chatID manually (since we're fetching all messages)
     const messages = allMessages.filter((message: Message) => message.chatID === chatID);
     
-    // Limit to the requested number
-    const limitedMessages = messages.slice(0, limit);
+    // Sort messages by timestamp to ensure we get the most recent ones
+    // Messages should be sorted with newest first (descending order)
+    const sortedMessages = messages.sort((a: Message, b: Message) => {
+      const timestampA = a.timestamp || 0;
+      const timestampB = b.timestamp || 0;
+      
+      // Convert to numbers if they're strings
+      const numA = typeof timestampA === 'string' ? parseFloat(timestampA) : timestampA;
+      const numB = typeof timestampB === 'string' ? parseFloat(timestampB) : timestampB;
+      
+      // Sort in descending order (newest first)
+      return numB - numA;
+    });
     
-    console.log(`Fetched ${limitedMessages.length} messages from chat ${chatID} (filtered from ${allMessages.length} total messages)`);
+    // Limit to the requested number (take the first N messages, which are the newest)
+    const limitedMessages = sortedMessages.slice(0, limit);
+    
+    console.log(`Fetched ${limitedMessages.length} messages from chat ${chatID} (filtered from ${allMessages.length} total messages, sorted by timestamp)`);
     
     return limitedMessages;
   } catch (error) {
