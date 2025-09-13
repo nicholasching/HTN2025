@@ -15,3 +15,7 @@ export type { Chat, ChatSearchOptions } from './fetchChats';
 // Export message functions
 export { fetchMessages, formatMessage, displayMessages } from './fetchMessages';
 export type { Message, MessageSearchOptions } from './fetchMessages';
+
+// Export message sending functions
+export { sendMessage, sendReply } from './postMessages';
+export type { MessageSendParams, MessageSendResponse } from './postMessages';

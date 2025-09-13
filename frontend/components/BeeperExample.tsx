@@ -1,8 +1,8 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { fetchAccounts, fetchChats, fetchMessages } from '@/lib/beeper';
-import type { Account, Chat, Message } from '@/lib/beeper';
+import { fetchAccounts, fetchChats, fetchMessages, sendMessage } from '@/lib/beeper';
+import type { Account, Chat, Message, MessageSendResponse } from '@/lib/beeper';
 
 export default function BeeperExample() {
   const [accessToken, setAccessToken] = useState<string | null>(null);
@@ -16,21 +16,18 @@ export default function BeeperExample() {
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [filteredChats, setFilteredChats] = useState<Chat[]>([]);
   const [workflowStep, setWorkflowStep] = useState<string>('Initializing...');
+  const [workflowCompleted, setWorkflowCompleted] = useState<boolean>(false);
+  const [messageInput, setMessageInput] = useState<string>('');
+  const [sendingMessage, setSendingMessage] = useState<boolean>(false);
 
   // Load access token from environment variable on component mount
   useEffect(() => {
     const token = process.env.NEXT_PUBLIC_BEEPER_ACCESS_TOKEN;
-    console.log('🔍 Debug: Token check:', token ? 'Token found' : 'No token found');
-    console.log('🔍 Debug: Token value:', token?.substring(0, 20) + '...' || 'undefined');
     
     if (token && token !== 'your_access_token_here') {
-      console.log('✅ Valid token found, setting state and running workflow');
       setAccessToken(token);
       // Automatically run the full workflow when token is loaded
       runFullWorkflow(token);
-    } else {
-      console.warn('⚠️  No Beeper access token found. Please set NEXT_PUBLIC_BEEPER_ACCESS_TOKEN in your .env.local file');
-      console.log('🔍 Debug: Current token value:', token);
     }
   }, []);
 
@@ -48,44 +45,43 @@ export default function BeeperExample() {
     }
   }, [chats, searchQuery]);
 
+  // Auto-scroll to bottom when messages change
+  useEffect(() => {
+    const messagesContainer = document.getElementById('messages-container');
+    if (messagesContainer) {
+      // Use setTimeout to ensure DOM has updated
+      setTimeout(() => {
+        messagesContainer.scrollTop = messagesContainer.scrollHeight;
+      }, 0);
+    }
+  }, [messages, selectedChat]);
+
   // Full workflow function that mimics test.ts behavior
   const runFullWorkflow = async (token: string) => {
-    console.log('🚀 Starting runFullWorkflow with token:', token.substring(0, 20) + '...');
     setLoading(true);
     setError(null);
     
     try {
-      console.log('🧪 Starting Beeper API Workflow...');
-      console.log('Workflow: All Accounts → Instagram Chats → First Chat Messages (100)');
-      
       // Step 1: Fetch all available accounts
       setWorkflowStep('Fetching accounts...');
-      console.log('\n📋 STEP 1: Fetching all available accounts...');
       const accountsData = await fetchAccounts(token);
       setAccounts(accountsData);
       
       if (accountsData.length === 0) {
-        console.log('❌ No connected accounts found.');
         return;
       }
       
       // Step 2: Find the Instagram account
       setWorkflowStep('Finding Instagram account...');
-      console.log('\n🎯 STEP 2: Finding Instagram account...');
       const instagramAccount = accountsData.find(account => account.accountID === 'instagramgo');
       
       if (!instagramAccount) {
-        console.log('❌ Instagram account not found. Available accounts:');
-        accountsData.forEach(acc => console.log(`  - ${acc.network} (${acc.accountID})`));
-        
         // If no Instagram, use the last account as fallback
         const fallbackAccount = accountsData[accountsData.length - 1];
-        console.log(`🔄 Using fallback account: ${fallbackAccount.network} (${fallbackAccount.accountID})`);
         setSelectedAccount(fallbackAccount.accountID);
         
         // Step 3: Fetch chats for fallback account
         setWorkflowStep(`Fetching chats for ${fallbackAccount.network}...`);
-        console.log(`\n💬 STEP 3: Fetching chats for ${fallbackAccount.network}...`);
         const chatsData = await fetchChats(fallbackAccount.accountID, token);
         setChats(chatsData);
         
@@ -94,57 +90,37 @@ export default function BeeperExample() {
           const firstChat = chatsData[0];
           setSelectedChat(firstChat.id);
           setWorkflowStep('Fetching messages from first chat...');
-          console.log(`\n📨 STEP 4: Fetching messages from first chat...`);
           const messagesData = await fetchMessages(firstChat.id, 100, token);
           setMessages(messagesData);
-          
-          console.log(`✅ Workflow completed with ${fallbackAccount.network}!`);
-          console.log(`Total: ${accountsData.length} accounts → ${chatsData.length} chats → ${messagesData.length} messages`);
         }
         return;
       }
       
-      console.log(`✅ Found Instagram account: ${instagramAccount.network} (ID: ${instagramAccount.accountID})`);
       setSelectedAccount(instagramAccount.accountID);
       
       // Step 3: Fetch chats for Instagram account
       setWorkflowStep('Fetching Instagram chats...');
-      console.log('\n💬 STEP 3: Fetching chats for Instagram account...');
       const chatsData = await fetchChats(instagramAccount.accountID, token);
       setChats(chatsData);
       
       if (chatsData.length === 0) {
-        console.log(`❌ No chats found for Instagram account.`);
         return;
       }
       
       // Step 4: Get the first chat
-      console.log('\n🎯 STEP 4: Selecting the first chat from Instagram...');
       const firstChat = chatsData[0];
-      const chatData = firstChat as any;
-      const chatName = chatData.name || chatData.title || 'Unnamed Chat';
-      console.log(`Selected first chat: ${chatName} (ID: ${firstChat.id})`);
       setSelectedChat(firstChat.id);
       
       // Step 5: Fetch messages from the first chat
       setWorkflowStep('Fetching messages from first chat...');
-      console.log('\n📨 STEP 5: Fetching the last 100 messages from the first chat...');
       const messagesData = await fetchMessages(firstChat.id, 100, token);
       setMessages(messagesData);
       
-      // Step 6: Display results
-      console.log('\n📊 STEP 6: Workflow completed!');
-      console.log(`🎉 Results Summary:`);
-      console.log(`Selected Account: ${instagramAccount.network} (${instagramAccount.accountID})`);
-      console.log(`Selected Chat: ${chatName} (${firstChat.id})`);
-      console.log(`Messages Fetched: ${messagesData.length}`);
-      console.log(`Total workflow: ${accountsData.length} accounts → ${chatsData.length} chats → ${messagesData.length} messages`);
-      
       setWorkflowStep('Workflow completed successfully! 🎉');
+      setWorkflowCompleted(true);
       
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      console.error('❌ Workflow failed:', errorMessage);
       setError(`Workflow failed: ${errorMessage}`);
       setWorkflowStep('Workflow failed ❌');
     } finally {
@@ -155,7 +131,6 @@ export default function BeeperExample() {
   const handleFetchAccounts = async (token?: string) => {
     const currentToken = token || accessToken;
     if (!currentToken) {
-      console.error('No access token available');
       return;
     }
 
@@ -164,7 +139,7 @@ export default function BeeperExample() {
       const accountsData = await fetchAccounts(currentToken);
       setAccounts(accountsData);
     } catch (error) {
-      console.error('Error fetching accounts:', error);
+      // Handle error silently in production
     } finally {
       setLoading(false);
     }
@@ -184,12 +159,15 @@ export default function BeeperExample() {
     setLoading(true);
     setError(null);
     try {
-      console.log(`🔄 Fetching chats for account: ${accountID}`);
       const chatsData = await fetchChats(accountID, accessToken);
       setChats(chatsData);
-      console.log(`✅ Loaded ${chatsData.length} chats for account ${accountID}`);
+      
+      // Auto-select the first chat if none is selected
+      if (chatsData.length > 0 && !selectedChat) {
+        const firstChat = chatsData[0];
+        handleFetchMessages(firstChat.id);
+      }
     } catch (error) {
-      console.error('Error fetching chats:', error);
       const errorMessage = error instanceof Error ? error.message : String(error);
       setError(`Failed to fetch chats: ${errorMessage}`);
     } finally {
@@ -198,63 +176,138 @@ export default function BeeperExample() {
   };
 
   const handleFetchMessages = async (chatID: string) => {
-    if (!accessToken) return;
+    if (!accessToken) {
+      return;
+    }
     
     // Clear previous messages immediately when selecting a new chat
     if (selectedChat !== chatID) {
       setMessages([]);
-      setSelectedChat(chatID);
     }
+    
+    // Always set the selected chat, even if we fail to load messages
+    setSelectedChat(chatID);
 
     setLoading(true);
     try {
-      console.log(`🔄 Fetching messages for chat: ${chatID}`);
-      const messagesData = await fetchMessages(chatID, 100, accessToken); // Increased to 100 messages
+      const messagesData = await fetchMessages(chatID, 100, accessToken);
       setMessages(messagesData);
-      console.log(`✅ Loaded ${messagesData.length} messages for chat ${chatID}`);
+      // Ensure we scroll to bottom after loading messages
+      setTimeout(scrollToBottom, 100);
     } catch (error) {
-      console.error('Error fetching messages:', error);
       const errorMessage = error instanceof Error ? error.message : String(error);
       setError(`Failed to fetch messages: ${errorMessage}`);
-      // Don't clear selectedChat on error, so user can try again
     } finally {
       setLoading(false);
     }
   };
 
+  // Scroll to bottom function
+  const scrollToBottom = () => {
+    const messagesContainer = document.getElementById('messages-container');
+    if (messagesContainer) {
+      messagesContainer.scrollTop = messagesContainer.scrollHeight;
+    }
+  };
+
+  // Handle sending a new message
+  const handleSendMessage = async () => {
+    if (!accessToken || !selectedChat || !messageInput.trim()) {
+      return;
+    }
+
+    setSendingMessage(true);
+    setError(null);
+
+    try {
+      const response = await sendMessage({
+        chatID: selectedChat,
+        text: messageInput.trim()
+      }, accessToken);
+      
+      // Clear the input and refresh messages
+      setMessageInput('');
+      setTimeout(() => {
+        handleFetchMessages(selectedChat);
+        // Ensure we scroll to bottom after refreshing messages
+        setTimeout(scrollToBottom, 100);
+      }, 1000);
+
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      setError(`Failed to send message: ${errorMessage}`);
+    } finally {
+      setSendingMessage(false);
+    }
+  };
+
+  // Handle Enter key press in message input
+  const handleKeyPress = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSendMessage();
+    }
+  };
+
   return (
-    <div className="min-h-screen bg-gray-900 text-white">
-      {/* Header */}
-      <div className="bg-gray-800 border-b border-gray-700 p-4">
-        <div className="max-w-6xl mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 bg-purple-600 rounded-lg flex items-center justify-center">
-              <span className="text-white font-bold text-sm">B</span>
+    <div className="min-h-screen bg-[#0f0f0f] text-gray-100">
+      <style jsx>{`
+        @keyframes shimmer {
+          0% { transform: translateX(-100%); }
+          100% { transform: translateX(100%); }
+        }
+        .animate-shimmer {
+          animation: shimmer 2s ease-in-out infinite;
+        }
+      `}</style>
+      {/* Modern Header */}
+      <div className="bg-[#1a1a1a] border-b border-gray-800/50 backdrop-blur-lg">
+        <div className="max-w-[1600px] mx-auto px-6 py-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <div className="relative">
+                <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-pink-500 rounded-xl flex items-center justify-center shadow-lg shadow-purple-500/20">
+                  <span className="text-white font-bold text-lg">B</span>
+                </div>
+                <div className="absolute -bottom-1 -right-1 w-3 h-3 bg-green-400 rounded-full border-2 border-[#1a1a1a] animate-pulse"></div>
+              </div>
+              <div>
+                <h1 className="text-xl font-semibold text-white">Beeper Desktop API</h1>
+                <p className="text-xs text-gray-400">Testing Dashboard v2.0</p>
+              </div>
             </div>
-            <h1 className="text-xl font-semibold">Beeper API Demo</h1>
+            
+            {/* Status and Actions */}
+            <div className="flex items-center gap-4">
+              {accessToken ? (
+                <div className="flex items-center gap-2 px-3 py-1.5 bg-green-500/10 border border-green-500/30 rounded-full">
+                  <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
+                  <span className="text-sm text-green-400 font-medium">API Connected</span>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2 px-3 py-1.5 bg-red-500/10 border border-red-500/30 rounded-full">
+                  <div className="w-2 h-2 bg-red-400 rounded-full"></div>
+                  <span className="text-sm text-red-400 font-medium">Disconnected</span>
+                </div>
+              )}
+              <button
+                onClick={() => window.location.reload()}
+                className="p-2 hover:bg-gray-800/50 rounded-lg transition-all hover:scale-105"
+                title="Refresh Dashboard"
+              >
+                <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+              </button>
+            </div>
           </div>
           
-          {/* Status Indicator */}
-          <div className="flex items-center gap-2">
-            {accessToken ? (
-              <>
-                <div className="w-2 h-2 bg-green-400 rounded-full"></div>
-                <span className="text-sm text-green-400">Connected</span>
-              </>
-            ) : (
-              <>
-                <div className="w-2 h-2 bg-red-400 rounded-full"></div>
-                <span className="text-sm text-red-400">Disconnected</span>
-              </>
-            )}
-          </div>
-        </div>
-        
-        {/* Loading Bar */}
-        {loading && (
-          <div className="max-w-6xl mx-auto mt-2">
-            <div className="w-full bg-gray-700 rounded-full h-1">
-              <div className="bg-purple-600 h-1 rounded-full animate-pulse" style={{ width: '60%' }}></div>
+          {/* Progress Bar */}
+          {loading && (
+            <div className="mt-3">
+              <div className="w-full bg-gray-800/50 rounded-full h-1 overflow-hidden">
+                <div className="h-full bg-gradient-to-r from-purple-500 to-pink-500 rounded-full animate-shimmer" 
+                     style={{ width: '60%', animation: 'shimmer 2s ease-in-out infinite' }}></div>
             </div>
             <div className="text-xs text-gray-400 mt-1">{workflowStep}</div>
           </div>
@@ -267,115 +320,65 @@ export default function BeeperExample() {
             <div className="text-xs text-red-400 mt-1">Check browser console for details</div>
           </div>
         )}
+        </div>
       </div>
 
-      <div className="max-w-6xl mx-auto p-4">
-        {/* Workflow Stats */}
-        {accounts.length > 0 && (
-          <div className="mb-6 p-4 bg-gray-800 rounded-lg border border-gray-700">
-            <div className="flex items-center justify-between">
-              <div className="text-sm text-gray-300">
-                🔄 Workflow Progress: 
-                <span className="text-purple-400 ml-2">
-                  {accounts.length} accounts → {chats.length} chats → {messages.length} messages
-                </span>
-              </div>
-              <div className="text-xs text-gray-500">
-                {!loading && workflowStep}
-              </div>
-            </div>
-          </div>
-        )}
-        
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-[calc(100vh-280px)]">
+      <div className="max-w-[1600px] mx-auto p-6">
+        {/* Main Content Grid - Production Layout */}
+        <div className="flex gap-4 h-[calc(100vh-200px)]">
 
-          {/* Accounts Panel */}
-          <div className="bg-gray-800 rounded-lg border border-gray-700 overflow-hidden">
-            <div className="p-4 border-b border-gray-700">
-              <h2 className="text-lg font-semibold text-white">
-                Accounts ({accounts.length})
-              </h2>
-              {selectedAccount && (
-                <div className="text-sm text-purple-400 mt-1">
-                  Active: {accounts.find(a => a.accountID === selectedAccount)?.network}
-                </div>
-              )}
-            </div>
-            <div className="overflow-y-auto max-h-96">
-              {accounts.map((account) => (
-                <div
-                  key={account.accountID}
-                  className={`p-4 border-b border-gray-700 cursor-pointer transition-colors hover:bg-gray-750 ${
-                    selectedAccount === account.accountID 
-                      ? 'bg-purple-900/30 border-l-4 border-l-purple-500' 
-                      : ''
-                  }`}
-                  onClick={() => handleFetchChats(account.accountID)}
-                >
-                  <div className="flex items-center gap-3">
-                    {/* Network Icon */}
-                    <div className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold ${
-                      account.network === 'Instagram' ? 'bg-pink-600' :
-                      account.network === 'WhatsApp' ? 'bg-green-600' :
-                      account.network === 'Discord' ? 'bg-indigo-600' :
-                      account.network === 'Telegram' ? 'bg-blue-600' :
-                      'bg-gray-600'
-                    }`}>
-                      {account.network.charAt(0)}
-                    </div>
-                    
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2">
-                        <span className="font-medium text-white">{account.network}</span>
-                        {account.accountID === 'instagramgo' && (
-                          <span className="text-xs bg-purple-600 text-white px-2 py-1 rounded-full">
-                            Target
-                          </span>
-                        )}
-                        {selectedAccount === account.accountID && (
-                          <div className="w-2 h-2 bg-purple-400 rounded-full"></div>
-                        )}
-                      </div>
-                      {account.user && (
-                        <div className="text-sm text-gray-400">
-                          {account.user.displayName || account.user.name || 'Unknown'}
-                        </div>
-                      )}
-                      <div className="text-xs text-gray-500">ID: {account.accountID}</div>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
+          {/* Network Sidebar - Compact Icon Bar */}
+          <div className="w-16 bg-[#1a1a1a] rounded-xl border border-gray-800/50 flex flex-col items-center py-4 space-y-3">
+            {accounts.map((account) => (
+              <button
+                key={account.accountID}
+                onClick={() => handleFetchChats(account.accountID)}
+                className={`w-12 h-12 rounded-xl flex items-center justify-center text-lg transition-all hover:scale-110 ${
+                  selectedAccount === account.accountID 
+                    ? 'bg-purple-500 shadow-lg shadow-purple-500/30' 
+                    : 'bg-gray-700 hover:bg-gray-600'
+                }`}
+                title={account.network}
+              >
+                {account.network === 'Instagram' ? '📷' :
+                 account.network === 'WhatsApp' ? '💬' :
+                 account.network === 'Discord' ? '🎮' :
+                 account.network === 'Google Messages' ? '📱' :
+                 account.network === 'Google Chat' ? '💼' :
+                 account.network === 'LinkedIn' ? '💼' :
+                 account.network.charAt(0)}
+              </button>
+            ))}
           </div>
 
-          {/* Chats Panel */}
+          {/* Chats Panel - Compact Design */}
           {chats.length > 0 && (
-            <div className="bg-gray-800 rounded-lg border border-gray-700 overflow-hidden">
-              <div className="p-4 border-b border-gray-700">
-                <h2 className="text-lg font-semibold text-white">
-                  {accounts.find(a => a.accountID === selectedAccount)?.network} Chats ({filteredChats.length}{chats.length !== filteredChats.length ? ` of ${chats.length}` : ''})
-                </h2>
-                {selectedChat && (
-                  <div className="text-sm text-green-400 mt-1">
-                    Active: {((chats.find(c => c.id === selectedChat) as any)?.name || 
-                             (chats.find(c => c.id === selectedChat) as any)?.title || 
-                             'Unnamed Chat')}
-                  </div>
-                )}
+            <div className="flex-1 bg-[#1a1a1a] rounded-xl border border-gray-800/50 overflow-hidden flex flex-col">
+              <div className="p-4 border-b border-gray-800/50">
+                <div className="flex items-center justify-between mb-3">
+                  <h2 className="text-lg font-semibold text-white">
+                    {accounts.find(a => a.accountID === selectedAccount)?.network} Chats
+                    <span className="ml-2 text-xs px-2 py-0.5 bg-blue-500/20 text-blue-300 rounded-full">
+                      {filteredChats.length}
+                    </span>
+                  </h2>
+                </div>
                 
                 {/* Search Bar */}
-                <div className="mt-3">
+                <div className="relative">
                   <input
                     type="text"
                     placeholder="Search chats..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500"
+                    className="w-full px-3 py-2 bg-gray-800/50 border border-gray-700/50 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 transition-all text-sm"
                   />
+                  <svg className="absolute right-3 top-2.5 w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                  </svg>
                 </div>
               </div>
-              <div className="overflow-y-auto max-h-96">
+              <div className="overflow-y-auto flex-1">
                 {filteredChats.length === 0 ? (
                   <div className="p-4 text-center text-gray-400">
                     <div className="text-sm">
@@ -391,16 +394,16 @@ export default function BeeperExample() {
                   return (
                     <div
                       key={chat.id}
-                      className={`p-4 border-b border-gray-700 cursor-pointer transition-colors hover:bg-gray-750 ${
+                      className={`p-3 border-b border-gray-800/30 cursor-pointer transition-all hover:bg-gray-800/30 ${
                         selectedChat === chat.id 
-                          ? 'bg-green-900/30 border-l-4 border-l-green-500' 
-                          : ''
+                          ? 'bg-green-500/10 border-l-4 border-l-green-500' 
+                          : 'hover:pl-4'
                       }`}
                       onClick={() => handleFetchMessages(chat.id)}
                     >
-                      <div className="flex items-start gap-3">
+                      <div className="flex items-center gap-3">
                         {/* Chat Avatar */}
-                        <div className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold ${
+                        <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold ${
                           chat.type === 'group' ? 'bg-blue-600' : 'bg-gray-600'
                         }`}>
                           {chat.type === 'group' ? '#' : chatName.charAt(0).toUpperCase()}
@@ -408,20 +411,14 @@ export default function BeeperExample() {
                         
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2">
-                            <span className="font-medium text-white truncate">{chatName}</span>
-                            {index === 0 && (
-                              <span className="text-xs bg-green-600 text-white px-2 py-1 rounded-full">
-                                First
-                              </span>
-                            )}
+                            <span className="font-medium text-white truncate text-sm">{chatName}</span>
                             {selectedChat === chat.id && (
                               <div className="w-2 h-2 bg-green-400 rounded-full"></div>
                             )}
                           </div>
-                          <div className="text-xs text-gray-400 capitalize">{chat.type} chat</div>
                           {lastMessage && (
-                            <div className="text-sm text-gray-500 truncate mt-1">
-                              {lastMessage.substring(0, 40)}...
+                            <div className="text-xs text-gray-500 truncate mt-1">
+                              {lastMessage.substring(0, 30)}...
                             </div>
                           )}
                         </div>
@@ -434,20 +431,25 @@ export default function BeeperExample() {
             </div>
           )}
 
-          {/* Messages Panel */}
-          {messages.length > 0 && (
-            <div className="bg-gray-800 rounded-lg border border-gray-700 overflow-hidden">
-              <div className="p-4 border-b border-gray-700">
+          {/* Messages Panel - Compact Design */}
+          <div className="flex-1 bg-[#1a1a1a] rounded-xl border border-gray-800/50 overflow-hidden flex flex-col">
+            <div className="p-4 border-b border-gray-800/50 flex-shrink-0">
+              <div className="flex items-center justify-between">
                 <h2 className="text-lg font-semibold text-white">
-                  Messages ({messages.length})
+                  Messages
+                  <span className="ml-2 text-xs px-2 py-0.5 bg-green-500/20 text-green-300 rounded-full">
+                    {messages.length}
+                  </span>
                 </h2>
-                <div className="text-sm text-blue-400 mt-1">
-                  From: {((chats.find(c => c.id === selectedChat) as any)?.name || 
-                         (chats.find(c => c.id === selectedChat) as any)?.title || 
-                         'Selected Chat')}
-                </div>
+                {loading && (
+                  <div className="flex items-center gap-2 text-green-400">
+                    <div className="w-4 h-4 border-2 border-green-400 border-t-transparent rounded-full animate-spin"></div>
+                    <span className="text-xs">Loading...</span>
+                  </div>
+                )}
               </div>
-              <div className="overflow-y-auto max-h-96 space-y-1">
+            </div>
+            <div id="messages-container" className="flex-1 overflow-y-auto space-y-1 min-h-0">
                 {loading && selectedChat && messages.length === 0 ? (
                   // Loading state for messages
                   <div className="p-4 text-center">
@@ -492,10 +494,10 @@ export default function BeeperExample() {
                   }
                   
                   return (
-                    <div key={message.id || index} className="p-3 hover:bg-gray-750 transition-colors border-b border-gray-700/50">
-                      <div className="flex items-start gap-3">
+                    <div key={message.id || index} className="p-2 hover:bg-gray-800/30 transition-colors border-b border-gray-800/30">
+                      <div className="flex items-start gap-2">
                         {/* Sender Avatar */}
-                        <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${
+                        <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${
                           isMe ? 'bg-purple-600' : 'bg-gradient-to-br from-blue-500 to-purple-600'
                         }`}>
                           {senderName.charAt(0).toUpperCase()}
@@ -503,14 +505,14 @@ export default function BeeperExample() {
                         
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 mb-1">
-                            <span className={`text-sm font-medium ${isMe ? 'text-purple-400' : 'text-gray-300'}`}>
+                            <span className={`text-xs font-medium ${isMe ? 'text-purple-400' : 'text-gray-300'}`}>
                               {senderName}
                             </span>
                             <span className="text-xs text-gray-500">
                               {formattedTime}
                             </span>
                             {isMe && (
-                              <span className="text-xs bg-purple-600 text-white px-2 py-0.5 rounded-full">
+                              <span className="text-xs bg-purple-600 text-white px-1.5 py-0.5 rounded-full">
                                 You
                               </span>
                             )}
@@ -518,19 +520,48 @@ export default function BeeperExample() {
                           <div className="text-sm text-gray-200 leading-relaxed break-words">
                             {content}
                           </div>
-                          {/* Show message metadata on hover */}
-                          <div className="text-xs text-gray-500 mt-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                            ID: {message.id || messageData.messageID || messageData.guid}
-                          </div>
                         </div>
                       </div>
                     </div>
                   );
                   })
                 )}
+            </div>
+            
+            {/* Message Input - Production Design */}
+            <div className="p-4 border-t border-gray-800/50 bg-gray-800/30">
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  placeholder={selectedChat 
+                    ? `Send a message to ${((chats.find(c => c.id === selectedChat) as any)?.name || 
+                                         (chats.find(c => c.id === selectedChat) as any)?.title || 
+                                         'this chat')}...`
+                    : 'Select a chat first...'}
+                  value={messageInput}
+                  onChange={(e) => setMessageInput(e.target.value)}
+                  onKeyPress={selectedChat ? handleKeyPress : undefined}
+                  disabled={!selectedChat || sendingMessage}
+                  className="flex-1 px-3 py-2 bg-gray-700/50 border border-gray-600/50 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500/20 disabled:opacity-50 disabled:cursor-not-allowed transition-all text-sm"
+                />
+                <button
+                  onClick={handleSendMessage}
+                  disabled={!selectedChat || sendingMessage || !messageInput.trim()}
+                  className="px-4 py-2 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-lg hover:from-purple-700 hover:to-pink-700 focus:outline-none focus:ring-2 focus:ring-purple-500/30 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                >
+                  {sendingMessage ? (
+                    <div className="flex items-center gap-1">
+                      <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                      <span className="text-xs">Sending...</span>
+                    </div>
+                  ) : (
+                    '📤 Send'
+                  )}
+                </button>
               </div>
             </div>
-          )}
+          </div>
+          
         </div>
       </div>
     </div>
