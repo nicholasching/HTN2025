@@ -8,6 +8,8 @@ import FlirtingWingman from './FlirtingWingman';
 import ChatSummary from './ChatSummary';
 import ChatSummaryBadge from './ChatSummaryBadge';
 import HoverableText from './HoverableText';
+import SuggestionSidebar from './SuggestionSidebar';
+import SuggestionToggle from './SuggestionToggle';
 
 export default function BeeperExample() {
   const [accessToken, setAccessToken] = useState<string | null>(null);
@@ -35,15 +37,24 @@ export default function BeeperExample() {
   const checkTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const [showSummaryOverlay, setShowSummaryOverlay] = useState<boolean>(false);
   const [chatSummaries, setChatSummaries] = useState<Record<string, { messages: Message[], unreadCount: number }>>({});
+  
+  // Suggestion Agent states
+  const [showSuggestionSidebar, setShowSuggestionSidebar] = useState<boolean>(false);
+  const [cohereApiKey, setCohereApiKey] = useState<string>('');
 
   // Load access token from environment variable on component mount
   useEffect(() => {
     const token = process.env.NEXT_PUBLIC_BEEPER_ACCESS_TOKEN;
+    const cohereKey = process.env.NEXT_PUBLIC_COHERE_API_KEY;
     
     if (token && token !== 'your_access_token_here') {
       setAccessToken(token);
       // Automatically run the full workflow when token is loaded
       runFullWorkflow(token);
+    }
+    
+    if (cohereKey && cohereKey !== 'your_cohere_api_key_here') {
+      setCohereApiKey(cohereKey);
     }
   }, []);
 
@@ -856,6 +867,11 @@ export default function BeeperExample() {
                            ✏️ Edit
                          </button>
                        )}
+                       {/* Suggestion Agent Toggle */}
+                       <SuggestionToggle
+                         isVisible={showSuggestionSidebar}
+                         onToggle={() => setShowSuggestionSidebar(!showSuggestionSidebar)}
+                       />
                      </div>
                    )}
                  </div>
@@ -1154,11 +1170,23 @@ export default function BeeperExample() {
        )}
 
        {/* AI Flirting Wingman Widget */}
-       <FlirtingWingman 
-         messages={messages}
-       />
-      {
-      /* AI Summary Overlay */}
+      <FlirtingWingman 
+        messages={messages}
+      />
+      
+      {/* Suggestion Sidebar */}
+      {selectedChat && accessToken && cohereApiKey && (
+        <SuggestionSidebar
+          chatId={selectedChat}
+          accountId={selectedAccount}
+          accessToken={accessToken}
+          cohereApiKey={cohereApiKey}
+          isVisible={showSuggestionSidebar}
+          onToggle={() => setShowSuggestionSidebar(!showSuggestionSidebar)}
+        />
+      )}
+      
+      {/* AI Summary Overlay */}
       <ChatSummary
         chatId={selectedChat}
         chatName={currentChatName}
