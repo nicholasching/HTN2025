@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { fetchAccounts, fetchChats, fetchMessages } from '@/lib/beeper';
 import type { Account, Chat, Message } from '@/lib/beeper';
+import HoverableText from './HoverableText';
 
 export default function BeeperExample() {
   const [accessToken, setAccessToken] = useState<string | null>(null);
@@ -515,9 +516,12 @@ export default function BeeperExample() {
                               </span>
                             )}
                           </div>
-                          <div className="text-sm text-gray-200 leading-relaxed break-words">
-                            {content}
-                          </div>
+                          <HoverableText 
+                            text={content}
+                            accountId={selectedAccount}
+                            chatId={selectedChat}
+                            className="text-sm text-gray-200 leading-relaxed break-words"
+                          />
                           {/* Show message metadata on hover */}
                           <div className="text-xs text-gray-500 mt-1 opacity-0 group-hover:opacity-100 transition-opacity">
                             ID: {message.id || messageData.messageID || messageData.guid}
