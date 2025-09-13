@@ -1,8 +1,10 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { fetchAccounts, fetchChats, fetchMessages, sendMessage } from '@/lib/beeper';
-import type { Account, Chat, Message, MessageSendResponse } from '@/lib/beeper';
+import { fetchAccounts, fetchChats, fetchMessages } from '@/lib/beeper';
+import type { Account, Chat, Message } from '@/lib/beeper';
+import { sendMessage } from '@/lib/beeper/postMessages';
+import FlirtingWingman from './FlirtingWingman';
 
 export default function BeeperExample() {
   const [accessToken, setAccessToken] = useState<string | null>(null);
@@ -564,6 +566,11 @@ export default function BeeperExample() {
           
         </div>
       </div>
+
+      {/* AI Flirting Wingman Widget */}
+      <FlirtingWingman 
+        messages={messages}
+      />
     </div>
   );
 }
