@@ -21,6 +21,7 @@ export default function BeeperExample() {
   const [workflowCompleted, setWorkflowCompleted] = useState<boolean>(false);
   const [messageInput, setMessageInput] = useState<string>('');
   const [sendingMessage, setSendingMessage] = useState<boolean>(false);
+  const [unreadCount, setUnreadCount] = useState<number>(0);
 
   // Load access token from environment variable on component mount
   useEffect(() => {
@@ -57,6 +58,15 @@ export default function BeeperExample() {
       }, 0);
     }
   }, [messages, selectedChat]);
+
+  // Calculate unread messages count
+  useEffect(() => {
+    const unreadMessages = messages.filter(message => {
+      const messageData = message as any;
+      return messageData.isUnread === true;
+    });
+    setUnreadCount(unreadMessages.length);
+  }, [messages]);
 
   // Full workflow function that mimics test.ts behavior
   const runFullWorkflow = async (token: string) => {
@@ -196,6 +206,16 @@ export default function BeeperExample() {
       setMessages(messagesData);
       // Ensure we scroll to bottom after loading messages
       setTimeout(scrollToBottom, 100);
+      
+      // Mark messages as read after a short delay (simulating read receipt)
+      setTimeout(() => {
+        setMessages(prevMessages => 
+          prevMessages.map(message => ({
+            ...message,
+            isUnread: false
+          }))
+        );
+      }, 2000);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       setError(`Failed to fetch messages: ${errorMessage}`);
@@ -437,12 +457,14 @@ export default function BeeperExample() {
           <div className="flex-1 bg-[#1a1a1a] rounded-xl border border-gray-800/50 overflow-hidden flex flex-col">
             <div className="p-4 border-b border-gray-800/50 flex-shrink-0">
               <div className="flex items-center justify-between">
-                <h2 className="text-lg font-semibold text-white">
-                  Messages
-                  <span className="ml-2 text-xs px-2 py-0.5 bg-green-500/20 text-green-300 rounded-full">
-                    {messages.length}
-                  </span>
-                </h2>
+                 <h2 className="text-lg font-semibold text-white">
+                   Messages
+                   {unreadCount > 0 && (
+                     <span className="ml-2 text-xs px-2 py-0.5 bg-red-500/20 text-red-300 rounded-full">
+                       {unreadCount} unread
+                     </span>
+                   )}
+                 </h2>
                 {loading && (
                   <div className="flex items-center gap-2 text-green-400">
                     <div className="w-4 h-4 border-2 border-green-400 border-t-transparent rounded-full animate-spin"></div>
@@ -477,8 +499,9 @@ export default function BeeperExample() {
                     messageData.user?.displayName ||
                     'Unknown Sender';
                   
-                  const content = message.text || messageData.content?.text || messageData.body || 'No text content';
-                  const isMe = messageData.isSender || senderName.toLowerCase().includes('nicholas') || senderName.toLowerCase().includes('you');
+                   const content = message.text || messageData.content?.text || messageData.body || 'No text content';
+                   const isMe = messageData.isSender || senderName.toLowerCase().includes('nicholas') || senderName.toLowerCase().includes('you');
+                   const isUnread = messageData.isUnread === true;
                   
                   // Format timestamp properly
                   const timestamp = messageData.timestamp;
@@ -495,37 +518,46 @@ export default function BeeperExample() {
                     formattedTime = 'Unknown';
                   }
                   
-                  return (
-                    <div key={message.id || index} className="p-2 hover:bg-gray-800/30 transition-colors border-b border-gray-800/30">
-                      <div className="flex items-start gap-2">
-                        {/* Sender Avatar */}
-                        <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${
-                          isMe ? 'bg-purple-600' : 'bg-gradient-to-br from-blue-500 to-purple-600'
-                        }`}>
-                          {senderName.charAt(0).toUpperCase()}
-                        </div>
-                        
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 mb-1">
-                            <span className={`text-xs font-medium ${isMe ? 'text-purple-400' : 'text-gray-300'}`}>
-                              {senderName}
-                            </span>
-                            <span className="text-xs text-gray-500">
-                              {formattedTime}
-                            </span>
-                            {isMe && (
-                              <span className="text-xs bg-purple-600 text-white px-1.5 py-0.5 rounded-full">
-                                You
-                              </span>
-                            )}
-                          </div>
-                          <div className="text-sm text-gray-200 leading-relaxed break-words">
-                            {content}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  );
+                   return (
+                     <div key={message.id || index} className={`p-2 hover:bg-gray-800/30 transition-colors border-b border-gray-800/30 ${
+                       isUnread ? 'bg-blue-500/5 border-l-2 border-l-blue-500' : ''
+                     }`}>
+                       <div className="flex items-start gap-2">
+                         {/* Sender Avatar */}
+                         <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${
+                           isMe ? 'bg-purple-600' : 'bg-gradient-to-br from-blue-500 to-purple-600'
+                         }`}>
+                           {senderName.charAt(0).toUpperCase()}
+                         </div>
+                         
+                         <div className="flex-1 min-w-0">
+                           <div className="flex items-center gap-2 mb-1">
+                             <span className={`text-xs font-medium ${isMe ? 'text-purple-400' : 'text-gray-300'}`}>
+                               {senderName}
+                             </span>
+                             <span className="text-xs text-gray-500">
+                               {formattedTime}
+                             </span>
+                             {isMe && (
+                               <span className="text-xs bg-purple-600 text-white px-1.5 py-0.5 rounded-full">
+                                 You
+                               </span>
+                             )}
+                             {isUnread && !isMe && (
+                               <span className="text-xs bg-blue-500 text-white px-1.5 py-0.5 rounded-full">
+                                 New
+                               </span>
+                             )}
+                           </div>
+                           <div className={`text-sm leading-relaxed break-words ${
+                             isUnread ? 'text-white font-medium' : 'text-gray-200'
+                           }`}>
+                             {content}
+                           </div>
+                         </div>
+                       </div>
+                     </div>
+                   );
                   })
                 )}
             </div>
