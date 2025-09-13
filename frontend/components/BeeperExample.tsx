@@ -5,7 +5,8 @@ import { fetchAccounts, fetchChats, fetchMessages } from '@/lib/beeper';
 import type { Account, Chat, Message } from '@/lib/beeper';
 import { sendMessage } from '@/lib/beeper/postMessages';
 import SimpleWingman from './SimpleWingman';
-import ChatSummary from './ChatSummary';
+// Remove ChatSummary import since we're deleting that file
+// import ChatSummary from './ChatSummary';
 import ChatSummaryBadge from './ChatSummaryBadge';
 import HoverableText from './HoverableText';
 import ProfessionalTextFloatingWidget from './ProfessionalTextFloatingWidget';
@@ -36,6 +37,7 @@ export default function BeeperExample() {
   const checkTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const [showSummaryOverlay, setShowSummaryOverlay] = useState<boolean>(false);
   const [chatSummaries, setChatSummaries] = useState<Record<string, { messages: Message[], unreadCount: number }>>({});
+  const [expandedSummaryId, setExpandedSummaryId] = useState<string | null>(null);
 
   // Load access token from environment variable on component mount
   useEffect(() => {
@@ -112,16 +114,6 @@ export default function BeeperExample() {
       }));
     }
   }, [messages, selectedChat]);
-
-  // Show summary overlay when a chat is first opened
-  useEffect(() => {
-    if (selectedChat && messages.length > 0) {
-      const chatSummary = chatSummaries[selectedChat];
-      if (chatSummary && chatSummary.unreadCount > 0) {
-        setShowSummaryOverlay(true);
-      }
-    }
-  }, [selectedChat, messages, chatSummaries]);
 
   // Full workflow function that mimics test.ts behavior
   const runFullWorkflow = async (token: string) => {
@@ -264,14 +256,15 @@ export default function BeeperExample() {
       setTimeout(scrollToBottom, 100);
       
       // Mark messages as read after a short delay (simulating read receipt)
-      setTimeout(() => {
-        setMessages(prevMessages => 
-          prevMessages.map(message => ({
-            ...message,
-            isUnread: false
-          }))
-        );
-      }, 2000);
+      // Commented out to prevent AI summaries from disappearing
+      // setTimeout(() => {
+      //   setMessages(prevMessages => 
+      //     prevMessages.map(message => ({
+      //       ...message,
+      //       isUnread: false
+      //     }))
+      //   );
+      // }, 2000);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       setError(`Failed to fetch messages: ${errorMessage}`);
@@ -821,6 +814,10 @@ export default function BeeperExample() {
                           chatName={chatName}
                           messages={chatSummary.messages}
                           unreadCount={chatSummary.unreadCount}
+                          isExpanded={expandedSummaryId === chat.id}
+                          onToggle={() => setExpandedSummaryId(
+                            expandedSummaryId === chat.id ? null : chat.id
+                          )}
                         />
                       )}
                     </div>
@@ -1177,15 +1174,15 @@ export default function BeeperExample() {
         disabled={!selectedChat || sendingMessage}
 ></ProfessionalTextFloatingWidget>
 {
-    /* AI Summary Overlay */}
-      <ChatSummary
+    /* Remove the ChatSummary popup component */}
+      {/* <ChatSummary
         chatId={selectedChat}
         chatName={currentChatName}
         messages={messages}
         unreadCount={unreadCount}
         isOpen={showSummaryOverlay}
         onClose={() => setShowSummaryOverlay(false)}
-      />
+      /> */}
     </div>
   );
 }
