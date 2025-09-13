@@ -1,0 +1,31 @@
+{
+  "name": "beeper-api-tests",
+  "version": "1.0.0",
+  "description": "Test scripts for Beeper Desktop API",
+  "main": "fetchMessages.js",
+  "scripts": {
+    "build": "tsc",
+    "test": "ts-node test.ts",
+    "dev": "ts-node fetchMessages.ts",
+    "workflow": "ts-node -e \"import('./fetchMessages').then(m => m.runWorkflowOnly())\"",
+    "accounts": "ts-node -e \"import('./fetchAccounts').then(m => m.fetchAccounts().then(console.log))\"",
+    "run-test": "ts-node test.ts"
+  },
+  "dependencies": {
+    "@beeper/desktop-api": "^0.1.4",
+    "dotenv": "^16.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.0.0",
+    "ts-node": "^10.9.0"
+  },
+  "keywords": [
+    "beeper",
+    "api",
+    "messaging",
+    "test"
+  ],
+  "author": "",
+  "license": "MIT"
+}
