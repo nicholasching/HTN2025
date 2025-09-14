@@ -1467,7 +1467,7 @@ You are the user. Write your response to ${respondingTo}:`;
                          }`}
                          title={agentEnabled ? 'Disable AI Agent' : 'Enable AI Agent'}
                        >
-                         {agentEnabled ? '🤖 AI ON' : '🤖 AI OFF'}
+                         {agentEnabled ? '🤖 OTTO ON' : '🤖 OTTO OFF'}
                        </button>
                          <button
                          onClick={() => setShowSettings(true)}
