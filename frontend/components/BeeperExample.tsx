@@ -6,6 +6,7 @@ import type { Account, Chat, Message } from '@/lib/beeper';
 import { sendMessage } from '@/lib/beeper/postMessages';
 import HoverableText from './HoverableText';
 import ChatSummaryOverlay from './ChatSummaryOverlay';
+import NetworkIcon from './NetworkIcon';
 import SettingsPage from './SettingsPage';
 
 export default function BeeperExample() {
@@ -1332,13 +1333,11 @@ You are the user. Write your response to ${respondingTo}:`;
                 }`}
                 title={account.network}
               >
-                {account.network === 'Instagram' ? '📷' :
-                 account.network === 'WhatsApp' ? '💬' :
-                 account.network === 'Discord' ? '🎮' :
-                 account.network === 'Google Messages' ? '📱' :
-                 account.network === 'Google Chat' ? '💼' :
-                 account.network === 'LinkedIn' ? '💼' :
-                 account.network.charAt(0)}
+                <NetworkIcon 
+                  network={account.network} 
+                  size={24} 
+                  className="text-white"
+                />
               </button>
             ))}
           </div>
