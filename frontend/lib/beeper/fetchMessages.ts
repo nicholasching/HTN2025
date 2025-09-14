@@ -34,19 +34,21 @@ export interface MessageSearchOptions {
 }
 
 /**
- * Fetch messages from a specific chat via API route
+ * Fetch messages from a specific chat via API route with pagination
  * 
  * @param chatID - The chat ID to fetch messages from
- * @param limit - Number of messages to fetch (default: 100)
+ * @param limit - Number of messages to fetch per page (default: 100)
  * @param accessToken - Required access token
  * @param options - Additional search options
+ * @param fetchAll - Whether to fetch all messages (true) or just the specified limit (false)
  * @returns Promise<Message[]> - Array of messages from the specified chat
  */
 export async function fetchMessages(
   chatID: string,
   limit: number = 100,
   accessToken: string,
-  options: Omit<MessageSearchOptions, 'chatIDs' | 'limit'> = {}
+  options: Omit<MessageSearchOptions, 'chatIDs' | 'limit'> = {},
+  fetchAll: boolean = true
 ): Promise<Message[]> {
   if (!accessToken) {
     throw new Error('Access token is required.');
@@ -55,50 +57,122 @@ export async function fetchMessages(
   try {
     console.log(`\n📨 Fetching messages from chat: ${chatID} via API route...`);
     
-    // Build query parameters
-    const params = new URLSearchParams();
-    params.set('limit', String(Math.min(limit * 5, 500))); // Get more messages but respect API limit
-    
-    // Set direction to 'before' to get the most recent messages (newest first)
-    // The API returns messages in reverse chronological order by default
-    params.set('direction', 'before');
-    
-    if (options.accountIDs) params.set('accountIDs', JSON.stringify(options.accountIDs));
-    if (options.chatType) params.set('chatType', options.chatType);
-    if (options.cursor) params.set('cursor', options.cursor);
-    if (options.dateAfter) params.set('dateAfter', options.dateAfter);
-    if (options.dateBefore) params.set('dateBefore', options.dateBefore);
-    if (options.direction) params.set('direction', options.direction); // Override if specified
-    if (options.excludeLowPriority !== undefined) params.set('excludeLowPriority', String(options.excludeLowPriority));
-    if (options.includeMuted !== undefined) params.set('includeMuted', String(options.includeMuted));
-    if (options.mediaTypes) params.set('mediaTypes', JSON.stringify(options.mediaTypes));
-    if (options.query) params.set('query', options.query);
-    if (options.sender) params.set('sender', options.sender);
-    
-    // Use full URL when called from server-side, relative URL for client-side
-    const baseUrl = typeof window === 'undefined' ? 'http://localhost:3000' : '';
-    const response = await fetch(`${baseUrl}/api/beeper/messages?${params}`, {
-      method: 'GET',
-      headers: {
-        'Authorization': `Bearer ${accessToken}`,
-        'Content-Type': 'application/json',
-      },
-    });
+    if (!fetchAll) {
+      // For limited fetching, use the original approach
+      const params = new URLSearchParams();
+      params.set('limit', String(limit));
+      params.set('direction', 'before');
+      
+      if (options.accountIDs) params.set('accountIDs', JSON.stringify(options.accountIDs));
+      if (options.chatType) params.set('chatType', options.chatType);
+      if (options.dateAfter) params.set('dateAfter', options.dateAfter);
+      if (options.dateBefore) params.set('dateBefore', options.dateBefore);
+      if (options.excludeLowPriority !== undefined) params.set('excludeLowPriority', String(options.excludeLowPriority));
+      if (options.includeMuted !== undefined) params.set('includeMuted', String(options.includeMuted));
+      if (options.mediaTypes) params.set('mediaTypes', JSON.stringify(options.mediaTypes));
+      if (options.query) params.set('query', options.query);
+      if (options.sender) params.set('sender', options.sender);
+      
+      const response = await fetch(`/api/beeper/messages?${params}`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        },
+      });
 
-    if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.error || `HTTP ${response.status}`);
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || `HTTP ${response.status}`);
+      }
+
+      const data = await response.json();
+      const pageMessages = data.items || data;
+      const chatMessages = pageMessages.filter((message: Message) => message.chatID === chatID);
+      
+      console.log(`📨 Fetched ${chatMessages.length} messages from chat ${chatID} (limited)`);
+      return chatMessages;
     }
+    
+    // For fetching all messages, use date-based pagination
+    const allMessages: Message[] = [];
+    let currentDate = new Date();
+    let hasMore = true;
+    let pageCount = 0;
+    const maxPages = 100; // Increased limit for date-based pagination
+    const daysPerPage = 30; // Fetch messages from 30 days at a time
+    
+    while (hasMore && pageCount < maxPages) {
+      pageCount++;
+      const endDate = new Date(currentDate);
+      const startDate = new Date(currentDate);
+      startDate.setDate(startDate.getDate() - daysPerPage);
+      
+      console.log(`📄 Fetching page ${pageCount} (${startDate.toISOString()} to ${endDate.toISOString()})...`);
+      
+      // Build query parameters for this date range
+      const params = new URLSearchParams();
+      params.set('limit', String(limit * 2)); // Get more messages per page for date-based approach
+      params.set('direction', 'before');
+      params.set('dateAfter', startDate.toISOString());
+      params.set('dateBefore', endDate.toISOString());
+      
+      if (options.accountIDs) params.set('accountIDs', JSON.stringify(options.accountIDs));
+      if (options.chatType) params.set('chatType', options.chatType);
+      if (options.excludeLowPriority !== undefined) params.set('excludeLowPriority', String(options.excludeLowPriority));
+      if (options.includeMuted !== undefined) params.set('includeMuted', String(options.includeMuted));
+      if (options.mediaTypes) params.set('mediaTypes', JSON.stringify(options.mediaTypes));
+      if (options.query) params.set('query', options.query);
+      if (options.sender) params.set('sender', options.sender);
+      
+      const response = await fetch(`/api/beeper/messages?${params}`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        },
+      });
 
-    const data = await response.json();
-    const allMessages = data.items || data; // Handle both response formats
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || `HTTP ${response.status}`);
+      }
+
+      const data = await response.json();
+      const pageMessages = data.items || data;
+      
+      if (!pageMessages || pageMessages.length === 0) {
+        console.log(`📄 No more messages found in date range ${pageCount}`);
+        hasMore = false;
+        break;
+      }
+      
+      // Filter by chatID for this page
+      const chatMessages = pageMessages.filter((message: Message) => message.chatID === chatID);
+      allMessages.push(...chatMessages);
+      
+      console.log(`📄 Page ${pageCount}: Found ${chatMessages.length} messages for chat ${chatID} (${pageMessages.length} total on page)`);
+      console.log(`📄 Total messages so far: ${allMessages.length}`);
+      
+      // Move to the next date range
+      currentDate = startDate;
+      
+      // If we got fewer messages than expected, we might be reaching the end
+      if (chatMessages.length < 10) {
+        console.log(`📄 Few messages found (${chatMessages.length}), might be reaching end of history`);
+        // Continue for a few more pages to be sure
+        if (pageCount > 5) {
+          hasMore = false;
+        }
+      }
+    }
     
-    // Filter by chatID manually (since we're fetching all messages)
-    const messages = allMessages.filter((message: Message) => message.chatID === chatID);
+    if (pageCount >= maxPages) {
+      console.warn(`⚠️ Reached maximum page limit (${maxPages}), stopping pagination`);
+    }
     
-    // Sort messages by timestamp to ensure we get the most recent ones
-    // Messages should be sorted with newest first (descending order)
-    const sortedMessages = messages.sort((a: Message, b: Message) => {
+    // Sort messages by timestamp (newest first for consistency with API)
+    const sortedMessages = allMessages.sort((a: Message, b: Message) => {
       const timestampA = a.timestamp || 0;
       const timestampB = b.timestamp || 0;
       
@@ -110,16 +184,31 @@ export async function fetchMessages(
       return numB - numA;
     });
     
-    // Limit to the requested number (take the first N messages, which are the newest)
-    const limitedMessages = sortedMessages.slice(0, limit);
+    console.log(`✅ Fetched ${sortedMessages.length} total messages from chat ${chatID} across ${pageCount} pages`);
     
-    console.log(`Fetched ${limitedMessages.length} messages from chat ${chatID} (filtered from ${allMessages.length} total messages, sorted by timestamp)`);
-    
-    return limitedMessages;
+    return sortedMessages;
   } catch (error) {
     console.error(`Failed to fetch messages from chat ${chatID}:`, error instanceof Error ? error.message : String(error));
     throw error;
   }
+}
+
+/**
+ * Fetch a limited number of messages from a specific chat (no pagination)
+ * 
+ * @param chatID - The chat ID to fetch messages from
+ * @param limit - Number of messages to fetch (default: 100)
+ * @param accessToken - Required access token
+ * @param options - Additional search options
+ * @returns Promise<Message[]> - Array of messages from the specified chat
+ */
+export async function fetchMessagesLimited(
+  chatID: string,
+  limit: number = 100,
+  accessToken: string,
+  options: Omit<MessageSearchOptions, 'chatIDs' | 'limit'> = {}
+): Promise<Message[]> {
+  return fetchMessages(chatID, limit, accessToken, options, false);
 }
 
 /**

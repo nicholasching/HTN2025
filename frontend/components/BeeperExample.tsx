@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { fetchAccounts, fetchChats, fetchMessages } from '@/lib/beeper';
+import { fetchAccounts, fetchChats, fetchMessages, fetchMessagesLimited } from '@/lib/beeper';
 import type { Account, Chat, Message } from '@/lib/beeper';
 import { sendMessage } from '@/lib/beeper/postMessages';
 import SimpleWingman from './SimpleWingman';
@@ -9,6 +9,7 @@ import SimpleWingman from './SimpleWingman';
 // import ChatSummary from './ChatSummary';
 import HoverableText from './HoverableText';
 import ChatSummaryOverlay from './ChatSummaryOverlay';
+import ProfessionalTextFloatingWidget from './ProfessionalTextFloatingWidget';
 
 export default function BeeperExample() {
   const [accessToken, setAccessToken] = useState<string | null>(null);
@@ -36,6 +37,17 @@ export default function BeeperExample() {
   const checkTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const [dismissedSummaries, setDismissedSummaries] = useState<Set<string>>(new Set());
   const [chatSummaries, setChatSummaries] = useState<Record<string, { messages: Message[], unreadCount: number }>>({});
+  
+  // Auto-draft response states
+  const [autoDraftResponse, setAutoDraftResponse] = useState<string>('');
+  const [isGeneratingDraft, setIsGeneratingDraft] = useState<boolean>(false);
+  const [showDraftIndicator, setShowDraftIndicator] = useState<boolean>(false);
+  const [aiNotConfident, setAiNotConfident] = useState<boolean>(false);
+  const [isLoadingMessages, setIsLoadingMessages] = useState<boolean>(false);
+  const [messageLoadProgress, setMessageLoadProgress] = useState<string>('');
+  const draftGeneratedForChat = useRef<string>('');
+  const lastMessageRef = useRef<HTMLDivElement>(null);
+  const [expandedSummaryId, setExpandedSummaryId] = useState<string | null>(null);
 
   // Load access token from environment variable on component mount
   useEffect(() => {
@@ -89,7 +101,7 @@ export default function BeeperExample() {
       // Use setTimeout to ensure DOM has updated
       setTimeout(() => {
         messagesContainer.scrollTop = messagesContainer.scrollHeight;
-      }, 0);
+      }, 100);
     }
   }, [messages, selectedChat]);
 
@@ -112,6 +124,64 @@ export default function BeeperExample() {
       }));
     }
   }, [messages, selectedChat]);
+
+  // Show summary overlay when a chat is first opened
+  // Auto-show summary overlay when chat has unread messages - disabled for now
+  // useEffect(() => {
+  //   if (selectedChat && messages.length > 0) {
+  //     const chatSummary = chatSummaries[selectedChat];
+  //     if (chatSummary && chatSummary.unreadCount > 0) {
+  //       // Summary overlay is now handled by ChatSummaryOverlay component
+  //     }
+  //   }
+  // }, [selectedChat, messages, chatSummaries]);
+
+  // Generate auto-draft response when a chat is opened (if last message wasn't from user)
+  useEffect(() => {
+    const generateDraftForNewChat = async () => {
+      if (!selectedChat || messages.length === 0 || isGeneratingDraft) {
+        return;
+      }
+
+      // Only generate draft if message input is empty
+      if (messageInput.trim()) {
+        return;
+      }
+
+      // Don't generate if we already generated a draft for this chat
+      if (draftGeneratedForChat.current === selectedChat) {
+        return;
+      }
+
+      console.log('🤖 Checking if auto-draft should be generated...');
+      setIsGeneratingDraft(true);
+      setShowDraftIndicator(true);
+
+      try {
+        const draftResponse = await generateAutoDraftResponse(messages);
+        if (draftResponse.trim()) {
+          setAutoDraftResponse(draftResponse);
+          setAiNotConfident(false);
+          draftGeneratedForChat.current = selectedChat; // Mark that we've generated a draft for this chat
+          console.log('✅ Auto-draft generated:', draftResponse.substring(0, 50) + '...');
+        } else {
+          setShowDraftIndicator(false);
+          setAiNotConfident(true);
+          console.log('⏭️ No auto-draft generated (AI not confident or last message was from user)');
+        }
+      } catch (error) {
+        console.error('❌ Error generating auto-draft:', error);
+        setShowDraftIndicator(false);
+        setAiNotConfident(true);
+      } finally {
+        setIsGeneratingDraft(false);
+      }
+    };
+
+    // Add a small delay to ensure messages are fully loaded
+    const timeoutId = setTimeout(generateDraftForNewChat, 500);
+    return () => clearTimeout(timeoutId);
+  }, [selectedChat, messages, messageInput, isGeneratingDraft]);
 
   // Full workflow function that mimics test.ts behavior
   const runFullWorkflow = async (token: string) => {
@@ -147,7 +217,7 @@ export default function BeeperExample() {
           const firstChat = chatsData[0];
           setSelectedChat(firstChat.id);
           setWorkflowStep('Fetching messages from first chat...');
-          const messagesData = await fetchMessages(firstChat.id, 100, token);
+          const messagesData = await fetchMessages(firstChat.id, 100, token, {}, true);
           setMessages(messagesData);
         }
         return;
@@ -170,7 +240,7 @@ export default function BeeperExample() {
       
       // Step 5: Fetch messages from the first chat
       setWorkflowStep('Fetching messages from first chat...');
-      const messagesData = await fetchMessages(firstChat.id, 100, token);
+      const messagesData = await fetchMessages(firstChat.id, 100, token, {}, true);
       setMessages(messagesData);
       
       setWorkflowStep('Workflow completed successfully! 🎉');
@@ -241,15 +311,24 @@ export default function BeeperExample() {
     // Clear previous messages immediately when selecting a new chat
     if (selectedChat !== chatID) {
       setMessages([]);
+      // Clear any existing auto-draft when switching chats
+      setAutoDraftResponse('');
+      setShowDraftIndicator(false);
+      setIsGeneratingDraft(false);
+      setAiNotConfident(false);
+      draftGeneratedForChat.current = ''; // Reset the draft tracking
     }
     
     // Always set the selected chat, even if we fail to load messages
     setSelectedChat(chatID);
 
     setLoading(true);
+    setIsLoadingMessages(true);
+    setMessageLoadProgress('Loading messages...');
     try {
-      const messagesData = await fetchMessages(chatID, 100, accessToken);
+      const messagesData = await fetchMessages(chatID, 100, accessToken, {}, true);
       setMessages(messagesData);
+      setMessageLoadProgress(`Loaded ${messagesData.length} messages`);
       // Ensure we scroll to bottom after loading messages
       setTimeout(scrollToBottom, 100);
       
@@ -268,14 +347,24 @@ export default function BeeperExample() {
       setError(`Failed to fetch messages: ${errorMessage}`);
     } finally {
       setLoading(false);
+      setIsLoadingMessages(false);
+      // Clear progress message after a delay
+      setTimeout(() => setMessageLoadProgress(''), 2000);
     }
   };
 
   // Scroll to bottom function
   const scrollToBottom = () => {
-    const messagesContainer = document.getElementById('messages-container');
-    if (messagesContainer) {
-      messagesContainer.scrollTop = messagesContainer.scrollHeight;
+    if (lastMessageRef.current) {
+      lastMessageRef.current.scrollIntoView({ behavior: 'smooth' });
+    } else {
+      const messagesContainer = document.getElementById('messages-container');
+      if (messagesContainer) {
+        // Add a small delay to ensure content is rendered
+        setTimeout(() => {
+          messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        }, 50);
+      }
     }
   };
 
@@ -296,6 +385,11 @@ export default function BeeperExample() {
       
       // Clear the input and refresh messages
       setMessageInput('');
+      // Clear any auto-draft when message is sent
+      setAutoDraftResponse('');
+      setShowDraftIndicator(false);
+      setAiNotConfident(false);
+      draftGeneratedForChat.current = ''; // Reset so we can generate a new draft if needed
       setTimeout(() => {
         handleFetchMessages(selectedChat);
         // Ensure we scroll to bottom after refreshing messages
@@ -318,6 +412,46 @@ export default function BeeperExample() {
     }
   };
 
+  // Handle keydown events for Ctrl+Space
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === ' ' && e.ctrlKey && showDraftIndicator && autoDraftResponse.trim()) {
+      e.preventDefault();
+      // Accept the auto-draft with Ctrl+Space
+      acceptAutoDraft();
+    }
+  };
+
+  // Accept the auto-draft response
+  const acceptAutoDraft = () => {
+    setMessageInput(autoDraftResponse);
+    setAutoDraftResponse('');
+    setShowDraftIndicator(false);
+    setAiNotConfident(false);
+    draftGeneratedForChat.current = ''; // Reset so we can generate a new draft if needed
+    
+    // Trigger textarea resize
+    setTimeout(() => {
+      const textarea = document.querySelector('textarea') as HTMLTextAreaElement;
+      if (textarea) {
+        textarea.style.height = 'auto';
+        const newHeight = Math.min(textarea.scrollHeight, 120);
+        textarea.style.height = newHeight + 'px';
+        
+        // Update button height to match textarea
+        const sendButton = textarea.parentElement?.querySelector('button') as HTMLButtonElement;
+        if (sendButton) {
+          sendButton.style.height = newHeight + 'px';
+        }
+        
+        if (textarea.scrollHeight > 120) {
+          textarea.style.overflowY = 'auto';
+        } else {
+          textarea.style.overflowY = 'hidden';
+        }
+      }
+    }, 50);
+  };
+
   // Handle AI wingman suggestion generation and auto-fill
   const handleWingmanSuggestion = (suggestion: string) => {
     setMessageInput(suggestion);
@@ -328,6 +462,12 @@ export default function BeeperExample() {
         textarea.style.height = 'auto';
         const newHeight = Math.min(textarea.scrollHeight, 120);
         textarea.style.height = newHeight + 'px';
+        
+        // Update button height to match textarea
+        const sendButton = textarea.parentElement?.querySelector('button') as HTMLButtonElement;
+        if (sendButton) {
+          sendButton.style.height = newHeight + 'px';
+        }
         
         // Enable scrolling if content exceeds max height
         if (textarea.scrollHeight > 120) {
@@ -376,6 +516,94 @@ export default function BeeperExample() {
     }
   };
 
+  // Generate auto-draft response for new chat
+  const generateAutoDraftResponse = async (messages: Message[]): Promise<string> => {
+    try {
+      if (messages.length === 0) {
+        return '';
+      }
+
+      // Sort messages by timestamp (newest first) to find the latest message
+      const sortedMessages = messages.sort((a, b) => {
+        const aTime = new Date(a.timestamp || 0).getTime();
+        const bTime = new Date(b.timestamp || 0).getTime();
+        return bTime - aTime;
+      });
+
+      // Get the latest message
+      const latestMessage = sortedMessages[0];
+      if (!latestMessage) {
+        return '';
+      }
+
+      // Check if the latest message is from the user
+      const isFromUser = latestMessage.isSender || 
+                        latestMessage.isMe || 
+                        (latestMessage.senderName && latestMessage.senderName.toLowerCase().includes('you')) ||
+                        (latestMessage.sender && latestMessage.sender.isSelf);
+
+      // Only generate draft if the latest message is NOT from the user
+      if (isFromUser) {
+        return '';
+      }
+
+      // Format context for draft generation
+      const contextString = messages.slice(0, 10).map(msg => {
+        const senderName = msg.senderName || 
+                         msg.sender?.name || 
+                         msg.sender?.displayName || 
+                         (msg.isSender ? 'You' : 'Other');
+        const text = msg.text || '';
+        return `${senderName}: ${text}`;
+      }).join('\n');
+
+      const response = await fetch('/api/cohere/generate', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          message: latestMessage.text || '',
+          instructions: `You are helping draft a response to a message. Generate a brief, helpful, and natural response that the user can send to the recipient.
+
+IMPORTANT RULES:
+- Write the response as if YOU are the user responding to the recipient
+- Keep it conversational and appropriate for the context
+- Be helpful and engaging
+- Keep responses concise (1-2 sentences typically)
+- If you're not confident you can provide a good response, return exactly: "NO_CONFIDENT_RESPONSE"
+- Do not include any meta-commentary or explanations
+- Write in first person ("I", "me", "my") as if you are the user
+
+Context of recent conversation:
+${contextString}
+
+Message to respond to: ${latestMessage.text || ''}
+
+Generate a natural response:`,
+          contextMessages: contextString
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+      const responseText = data.response || '';
+      
+      // Check if the AI is not confident enough to respond
+      if (responseText.trim() === 'NO_CONFIDENT_RESPONSE') {
+        return '';
+      }
+      
+      return responseText;
+    } catch (error) {
+      console.error('Error generating auto-draft response:', error);
+      return '';
+    }
+  };
+
   // Check for unread messages and respond to the latest one
   const checkForUnreadMessages = async () => {
     if (!selectedChat || !agentEnabled || !agentInstructionsMap[selectedChat]) {
@@ -392,7 +620,7 @@ export default function BeeperExample() {
       console.log('🔍 Checking for unread messages...');
       
       // Fetch recent messages from the chat (last 25 for context)
-      const messages = await fetchMessages(selectedChat, 25, accessToken!);
+      const messages = await fetchMessagesLimited(selectedChat, 25, accessToken!);
       console.log('📨 Fetched', messages.length, 'messages from chat');
       
       if (messages.length === 0) {
@@ -401,7 +629,7 @@ export default function BeeperExample() {
       }
 
       // Sort messages by timestamp (newest first)
-      const sortedMessages = messages.sort((a, b) => {
+      const sortedMessages = messages.sort((a: Message, b: Message) => {
         const aTime = new Date(a.timestamp || 0).getTime();
         const bTime = new Date(b.timestamp || 0).getTime();
         return bTime - aTime;
@@ -712,7 +940,7 @@ export default function BeeperExample() {
 
       <div className="max-w-[1600px] mx-auto p-6">
         {/* Main Content Grid - Production Layout */}
-        <div className="flex gap-4 h-[calc(100vh-200px)]">
+        <div className="flex gap-4" style={{ height: 'calc(100vh - 200px)' }}>
 
           {/* Network Sidebar - Compact Icon Bar */}
           <div className="w-16 bg-[#1a1a1a] rounded-xl border border-gray-800/50 flex flex-col items-center py-4 space-y-3">
@@ -845,6 +1073,12 @@ export default function BeeperExample() {
                        <span className="text-xs">Loading...</span>
                      </div>
                    )}
+                   {isLoadingMessages && messageLoadProgress && (
+                     <div className="flex items-center gap-2 text-blue-400">
+                       <div className="w-4 h-4 border-2 border-blue-400 border-t-transparent rounded-full animate-spin"></div>
+                       <span className="text-xs">{messageLoadProgress}</span>
+                     </div>
+                   )}
                    {selectedChat && (
                      <div className="flex items-center gap-2">
                        <button
@@ -914,13 +1148,21 @@ export default function BeeperExample() {
              
             {/* Chat Summary Overlay */}
             {selectedChat && !dismissedSummaries.has(selectedChat) && (
-              <ChatSummaryOverlay
-                chatId={selectedChat}
-                chatName={currentChatName}
-                messages={messages}
-                unreadCount={unreadCount}
-                onDismiss={handleDismissSummary}
-              />
+              <>
+                {console.log('Rendering ChatSummaryOverlay with:', { 
+                  selectedChat, 
+                  dismissed: dismissedSummaries.has(selectedChat), 
+                  unreadCount, 
+                  messagesCount: messages.length 
+                })}
+                <ChatSummaryOverlay
+                  chatId={selectedChat}
+                  chatName={currentChatName}
+                  messages={messages}
+                  unreadCount={unreadCount}
+                  onDismiss={handleDismissSummary}
+                />
+              </>
             )}
              
             <div id="messages-container" className="flex-1 overflow-y-auto space-y-1 min-h-0">
@@ -936,8 +1178,14 @@ export default function BeeperExample() {
                     <div className="text-sm">No messages found in this chat</div>
                   </div>
                 ) : (
-                  messages.map((message, index) => {
+                  // Sort messages by timestamp (oldest first) for display
+                  messages.sort((a, b) => {
+                    const aTime = new Date(a.timestamp || 0).getTime();
+                    const bTime = new Date(b.timestamp || 0).getTime();
+                    return aTime - bTime;
+                  }).map((message, index, array) => {
                   const messageData = message as any;
+                  const isLastMessage = index === array.length - 1;
                   const senderName = 
                     messageData.senderName ||
                     messageData.sender?.displayName ||
@@ -968,10 +1216,14 @@ export default function BeeperExample() {
                     formattedTime = 'Unknown';
                   }
                   
-                   return (
-                     <div key={message.id || index} className={`p-2 hover:bg-gray-800/30 transition-colors border-b border-gray-800/30 ${
-                       isUnread ? 'bg-blue-500/5 border-l-2 border-l-blue-500' : ''
-                     }`}>
+                    return (
+                      <div 
+                        key={message.id || index} 
+                        ref={isLastMessage ? lastMessageRef : null}
+                        className={`p-2 hover:bg-gray-800/30 transition-colors border-b border-gray-800/30 ${
+                          isUnread ? 'bg-blue-500/5 border-l-2 border-l-blue-500' : ''
+                        }`}
+                      >
                        <div className="flex items-start gap-2">
                          {/* Sender Avatar */}
                          <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${
@@ -1017,6 +1269,44 @@ export default function BeeperExample() {
             
             {/* Message Input - Production Design */}
             <div className="p-4 border-t border-gray-800/50 bg-gray-800/30">
+              {/* Auto-draft indicator */}
+              {isGeneratingDraft && (
+                <div className="mb-3 p-3 bg-blue-500/10 border border-blue-500/30 rounded-lg">
+                  <div className="flex items-center gap-2">
+                    <div className="w-4 h-4 border-2 border-blue-400 border-t-transparent rounded-full animate-spin"></div>
+                    <span className="text-sm text-blue-300 font-medium">Generating AI draft...</span>
+                  </div>
+                </div>
+              )}
+              
+              {showDraftIndicator && !isGeneratingDraft && (
+                <div className="mb-3 p-3 bg-blue-500/10 border border-blue-500/30 rounded-lg">
+                  <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2">
+                      <div className="w-2 h-2 bg-blue-400 rounded-full animate-pulse"></div>
+                       <span className="text-sm text-blue-300 font-medium">AI Response Draft</span>
+                      <span className="text-xs text-blue-400/70">Ctrl+Space to accept</span>
+                    </div>
+                  </div>
+                  <div className="mt-2 text-sm text-gray-300 italic">
+                    "{autoDraftResponse}"
+                  </div>
+                </div>
+              )}
+
+              {aiNotConfident && !isGeneratingDraft && !showDraftIndicator && (
+                <div className="mb-3 p-3 bg-yellow-500/10 border border-yellow-500/30 rounded-lg">
+                  <div className="flex items-center gap-2">
+                    <div className="w-2 h-2 bg-yellow-400 rounded-full"></div>
+                    <span className="text-sm text-yellow-300 font-medium">AI Not Confident</span>
+                    <span className="text-xs text-yellow-400/70">No auto-response generated</span>
+                  </div>
+                  <div className="mt-2 text-sm text-gray-300">
+                    The AI wasn't confident enough to generate a response. You can type your own message.
+                  </div>
+                </div>
+              )}
+              
               <div className="flex gap-2 items-end">
                 <textarea
                   ref={(textarea) => {
@@ -1025,6 +1315,12 @@ export default function BeeperExample() {
                         textarea.style.height = 'auto';
                         const newHeight = Math.min(textarea.scrollHeight, 120);
                         textarea.style.height = newHeight + 'px';
+                        
+                        // Update button height to match textarea
+                        const sendButton = textarea.parentElement?.querySelector('button') as HTMLButtonElement;
+                        if (sendButton) {
+                          sendButton.style.height = newHeight + 'px';
+                        }
                         
                         // Enable scrolling if content exceeds max height
                         if (textarea.scrollHeight > 120) {
@@ -1036,15 +1332,27 @@ export default function BeeperExample() {
                     }
                   }}
                   placeholder={selectedChat 
-                    ? `Send a message to ${((chats.find(c => c.id === selectedChat) as any)?.name || 
-                                         (chats.find(c => c.id === selectedChat) as any)?.title || 
-                                         'this chat')}...`
+                    ? (isGeneratingDraft 
+                        ? 'Generating AI draft...'
+                        : showDraftIndicator 
+                           ? 'Press Ctrl+Space to accept AI response, or type your own message...'
+                          : `Send a message to ${((chats.find(c => c.id === selectedChat) as any)?.name || 
+                                               (chats.find(c => c.id === selectedChat) as any)?.title || 
+                                               'this chat')}...`)
                     : 'Select a chat first...'}
                   value={messageInput}
                   onChange={(e) => {
                     setMessageInput(e.target.value);
+                    // Clear auto-draft when user starts typing
+                    if (showDraftIndicator && e.target.value.trim()) {
+                      setShowDraftIndicator(false);
+                      setAutoDraftResponse('');
+                      setAiNotConfident(false);
+                      draftGeneratedForChat.current = ''; // Reset so we can generate a new draft if needed
+                    }
                   }}
                   onKeyPress={selectedChat ? handleKeyPress : undefined}
+                  onKeyDown={selectedChat ? handleKeyDown : undefined}
                   disabled={!selectedChat || sendingMessage}
                   rows={1}
                   className="flex-1 px-3 py-2 bg-gray-700/50 border border-gray-600/50 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500/20 disabled:opacity-50 disabled:cursor-not-allowed text-sm resize-none"
@@ -1059,7 +1367,8 @@ export default function BeeperExample() {
                 <button
                   onClick={handleSendMessage}
                   disabled={!selectedChat || sendingMessage || !messageInput.trim()}
-                  className="px-4 py-2 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-lg hover:from-purple-700 hover:to-pink-700 focus:outline-none focus:ring-2 focus:ring-purple-500/30 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                  className="px-4 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-lg hover:from-purple-700 hover:to-pink-700 focus:outline-none focus:ring-2 focus:ring-purple-500/30 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center"
+                  style={{ height: '40px' }}
                 >
                   {sendingMessage ? (
                     <div className="flex items-center gap-1">
@@ -1071,6 +1380,7 @@ export default function BeeperExample() {
                   )}
                 </button>
               </div>
+              
             </div>
           </div>
           
@@ -1169,7 +1479,14 @@ export default function BeeperExample() {
         messages={messages}
         onSuggestionGenerated={handleWingmanSuggestion}
 ></SimpleWingman>
-    {/* Remove the ChatSummary popup component */}
+
+<ProfessionalTextFloatingWidget
+        messageInput={messageInput}
+        onTextUpdate={setMessageInput}
+        disabled={!selectedChat || sendingMessage}
+></ProfessionalTextFloatingWidget>
+{
+    /* Remove the ChatSummary popup component */}
       {/* <ChatSummary
         chatId={selectedChat}
         chatName={currentChatName}

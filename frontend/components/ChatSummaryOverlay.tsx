@@ -27,6 +27,10 @@ export default function ChatSummaryOverlay({
   unreadCount,
   onDismiss
 }: ChatSummaryOverlayProps) {
+  // Add safety checks for props
+  if (!chatId || !messages || typeof unreadCount !== 'number') {
+    return null;
+  }
   const [summary, setSummary] = useState<string>('');
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
@@ -34,7 +38,7 @@ export default function ChatSummaryOverlay({
 
   // Generate summary when component mounts
   useEffect(() => {
-    if (unreadCount === 0 || messages.length === 0) {
+    if (unreadCount === 0 || !messages || messages.length === 0 || !chatId) {
       return;
     }
 
@@ -54,6 +58,7 @@ export default function ChatSummaryOverlay({
       try {
         // Only get unread messages for summary
         const unreadMessages = messages.filter(message => {
+          if (!message) return false;
           const messageData = message as any;
           return messageData.isUnread === true;
         });
@@ -65,6 +70,7 @@ export default function ChatSummaryOverlay({
 
         // Prepare message context for the API
         const messageContext = unreadMessages.map(message => {
+          if (!message) return null;
           const messageData = message as any;
           const senderName = 
             messageData.senderName ||
@@ -85,7 +91,12 @@ export default function ChatSummaryOverlay({
             timestamp: message.timestamp,
             isUnread: true
           };
-        });
+        }).filter(Boolean);
+
+        if (messageContext.length === 0) {
+          setSummary('');
+          return;
+        }
 
         const response = await fetch('/api/generate-summary', {
           method: 'POST',
@@ -94,13 +105,13 @@ export default function ChatSummaryOverlay({
           },
           body: JSON.stringify({
             messages: messageContext,
-            chatName: chatName,
+            chatName: chatName || 'Unknown Chat',
             unreadCount: unreadCount
           }),
         });
 
         if (!response.ok) {
-          const errorData = await response.json();
+          const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
           throw new Error(errorData.error || 'Failed to generate summary');
         }
 
@@ -122,11 +133,14 @@ export default function ChatSummaryOverlay({
     generateSummary();
   }, [chatId, chatName, messages, unreadCount]);
 
-  // Only show if there are unread messages
-  if (unreadCount === 0) return null;
+  // Only show if there are unread messages and valid data
+  if (unreadCount === 0 || !chatId || !messages) {
+    console.log('ChatSummaryOverlay: Not showing -', { unreadCount, chatId: !!chatId, messages: !!messages });
+    return null;
+  }
 
   // Check if summary needs truncation (roughly 2 lines at 12px font size)
-  const shouldTruncate = summary.length > 120;
+  const shouldTruncate = summary && summary.length > 120;
 
   const handleToggleExpand = () => {
     setIsExpanded(!isExpanded);
