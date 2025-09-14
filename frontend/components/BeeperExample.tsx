@@ -205,7 +205,7 @@ export default function BeeperExample() {
               setShowDraftIndicator(true);
               setAiNotConfident(false);
               draftGeneratedForChat.current = selectedChat;
-            } else {
+    } else {
               setShowDraftIndicator(false);
               setAiNotConfident(result.shouldShowNotConfident);
             }
@@ -226,19 +226,48 @@ export default function BeeperExample() {
     return () => clearTimeout(timeoutId);
   }, [messageInput, messages, selectedChat, autocompleteMode, isGeneratingDraft, isGeneratingAutocomplete]);
 
-  // Filter chats based on search query
+  // Filter chats based on search query and sort by unread count
   useEffect(() => {
-    if (!searchQuery.trim()) {
-      setFilteredChats(chats);
-    } else {
-      const filtered = chats.filter(chat => {
+    let filtered = chats;
+    
+    if (searchQuery.trim()) {
+      filtered = chats.filter(chat => {
         const chatData = chat as any;
         const chatName = (chatData.name || chatData.title || '').toLowerCase();
         return chatName.includes(searchQuery.toLowerCase());
       });
-      setFilteredChats(filtered);
     }
+    
+    // Keep original order (no sorting)
+    
+      setFilteredChats(filtered);
   }, [chats, searchQuery]);
+
+
+  // Poll current chat for new messages every 3 seconds
+  useEffect(() => {
+    if (!accessToken || !selectedChat) {
+      return;
+    }
+
+    const pollCurrentChat = async () => {
+      try {
+        const newMessages = await fetchMessages(selectedChat, 100, accessToken, {}, true);
+        if (newMessages && newMessages.length !== messages.length) {
+          setMessages(newMessages);
+          console.log('📨 New messages detected in current chat, updated message list');
+        }
+      } catch (error) {
+        console.error('Error polling current chat:', error);
+      }
+    };
+
+    // Poll immediately, then every 3 seconds
+    pollCurrentChat();
+    const interval = setInterval(pollCurrentChat, 3000);
+
+    return () => clearInterval(interval);
+  }, [accessToken, selectedChat, messages.length]);
 
   // Auto-scroll to bottom when messages change
   useEffect(() => {
@@ -308,13 +337,13 @@ export default function BeeperExample() {
           const result = await generateAutoDraftResponse(messages);
           if (result.response.trim()) {
             setAutoDraftResponse(result.response);
-            setAiNotConfident(false);
-            draftGeneratedForChat.current = selectedChat; // Mark that we've generated a draft for this chat
+          setAiNotConfident(false);
+          draftGeneratedForChat.current = selectedChat; // Mark that we've generated a draft for this chat
             console.log('✅ Auto-draft generated:', result.response.substring(0, 50) + '...');
-          } else {
-            setShowDraftIndicator(false);
+        } else {
+          setShowDraftIndicator(false);
             setAiNotConfident(result.shouldShowNotConfident);
-            console.log('⏭️ No auto-draft generated (AI not confident or last message was from user)');
+          console.log('⏭️ No auto-draft generated (AI not confident or last message was from user)');
           }
         } else if (autocompleteMode === 'flirty') {
           // Generate flirty suggestion automatically
@@ -441,6 +470,7 @@ export default function BeeperExample() {
     try {
       const chatsData = await fetchChats(accountID, accessToken);
       setChats(chatsData);
+      
       
       // Auto-select the first chat if none is selected
       if (chatsData.length > 0 && !selectedChat) {
@@ -577,7 +607,7 @@ export default function BeeperExample() {
   const acceptAutoDraft = () => {
     if (autocompleteMode === 'professional') {
       // For professional mode, replace the current content
-      setMessageInput(autoDraftResponse);
+    setMessageInput(autoDraftResponse);
     } else {
       // For general and flirty modes, fill the input
       setMessageInput(autoDraftResponse);
@@ -1439,7 +1469,7 @@ You are the user. Write your response to ${respondingTo}:`;
                        >
                          {agentEnabled ? '🤖 AI ON' : '🤖 AI OFF'}
                        </button>
-                       <button
+                         <button
                          onClick={() => setShowSettings(true)}
                          className="p-1.5 text-gray-400 hover:text-white hover:bg-gray-600/50 rounded transition-all"
                          title="Settings"
@@ -1448,7 +1478,7 @@ You are the user. Write your response to ${respondingTo}:`;
                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                          </svg>
-                       </button>
+                         </button>
                      </div>
                    )}
                  </div>
@@ -1659,22 +1689,22 @@ You are the user. Write your response to ${respondingTo}:`;
                 (autocompleteMode === 'professional' ? 
                   (messageInput.trim().length >= 25 && autoDraftResponse.trim()) :
                   !messageInput.trim()) && (
-                  <div className="mb-3 p-3 bg-blue-500/10 border border-blue-500/30 rounded-lg">
+                <div className="mb-3 p-3 bg-blue-500/10 border border-blue-500/30 rounded-lg">
+                  <div className="flex items-center gap-2">
                     <div className="flex items-center gap-2">
-                      <div className="flex items-center gap-2">
-                        <div className="w-2 h-2 bg-blue-400 rounded-full animate-pulse"></div>
+                      <div className="w-2 h-2 bg-blue-400 rounded-full animate-pulse"></div>
                         <span className="text-sm text-blue-300 font-medium">
                           {autocompleteMode === 'general' ? 'General AI Response' : 
                            autocompleteMode === 'flirty' ? 'Flirty AI Response' : 
                            'Professional AI Response'}
                         </span>
-                        <span className="text-xs text-blue-400/70">Ctrl+Space to accept</span>
-                      </div>
-                    </div>
-                    <div className="mt-2 text-sm text-gray-300 italic">
-                      "{autoDraftResponse}"
+                      <span className="text-xs text-blue-400/70">Ctrl+Space to accept</span>
                     </div>
                   </div>
+                  <div className="mt-2 text-sm text-gray-300 italic">
+                    "{autoDraftResponse}"
+                  </div>
+                </div>
                 )
               )}
 
@@ -1684,14 +1714,14 @@ You are the user. Write your response to ${respondingTo}:`;
                 (autocompleteMode === 'professional' ? 
                   messageInput.trim().length >= 25 :
                   !messageInput.trim()) && (
-                  <div className="mb-3 p-3 bg-yellow-500/10 border border-yellow-500/30 rounded-lg">
-                    <div className="flex items-center gap-2">
-                      <div className="w-2 h-2 bg-yellow-400 rounded-full"></div>
-                      <span className="text-sm text-yellow-300 font-medium">AI Not Confident</span>
-                      <span className="text-xs text-yellow-400/70">No auto-response generated</span>
-                    </div>
-                    <div className="mt-2 text-sm text-gray-300">
-                      The AI wasn't confident enough to generate a response. You can type your own message.
+                <div className="mb-3 p-3 bg-yellow-500/10 border border-yellow-500/30 rounded-lg">
+                  <div className="flex items-center gap-2">
+                    <div className="w-2 h-2 bg-yellow-400 rounded-full"></div>
+                    <span className="text-sm text-yellow-300 font-medium">AI Not Confident</span>
+                    <span className="text-xs text-yellow-400/70">No auto-response generated</span>
+                  </div>
+                  <div className="mt-2 text-sm text-gray-300">
+                    The AI wasn't confident enough to generate a response. You can type your own message.
                     </div>
                   </div>
                 )
