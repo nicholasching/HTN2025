@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { BeeperClient } from '../../../lib/beeper-client';
+import { sendMessage } from '@/lib/beeper/postMessages';
+import { fetchAllChats } from '@/lib/beeper';
 
 interface VAPIWebhookPayload {
   type: string;
@@ -57,6 +58,69 @@ function parseVoiceCommand(transcript: string): ParsedCommand | null {
   return null;
 }
 
+// Helper function to find chat ID for a contact on a specific platform
+async function findChatForContact(contactName: string, platform: string, accessToken: string): Promise<string | null> {
+  try {
+    console.log(`🔍 Searching for ${platform} chat with: ${contactName}`);
+    
+    // Fetch chats using the same backend as the rest of the app
+    // We need to get all chats since we don't have a specific accountID
+    const chats = await fetchAllChats(accessToken, { limit: 200, includeMuted: true });
+    
+    // Filter chats by platform (accountID) - handle platform account name variations
+    let accountName = platform;
+    if (platform === 'discord') {
+      accountName = 'discordgo'; // Discord account is named 'discordgo' in Beeper
+    } else if (platform === 'instagram') {
+      accountName = 'instagram'; // Instagram account name
+    }
+    
+    const platformChats = chats.filter((chat: any) => chat.accountID === accountName);
+    console.log(`📱 Found ${platformChats.length} ${platform} chats (accountID: ${accountName})`);
+    
+    // Debug: Show all available accountIDs if no chats found
+    if (platformChats.length === 0) {
+      const availableAccounts = [...new Set(chats.map((chat: any) => chat.accountID))];
+      console.log(`🔍 Available accountIDs:`, availableAccounts);
+    }
+    
+    // Find chat matching the contact name
+    const matchingChat = platformChats.find((chat: any) => {
+      // Check chat title/name
+      if (chat.title?.toLowerCase().includes(contactName.toLowerCase()) || 
+          chat.name?.toLowerCase().includes(contactName.toLowerCase())) {
+        return true;
+      }
+      
+      // Check participants (participants.items is the actual array)
+      if (chat.participants?.items) {
+        return chat.participants.items.some((p: any) => 
+          p.displayName?.toLowerCase().includes(contactName.toLowerCase()) ||
+          p.name?.toLowerCase().includes(contactName.toLowerCase())
+        );
+      }
+      
+      return false;
+    });
+
+    if (matchingChat) {
+      console.log(`✅ Found ${platform} chat:`, { id: matchingChat.id, name: matchingChat.name });
+      return matchingChat.id;
+    }
+
+    // List available contacts for debugging
+    const availableContacts = platformChats.map((chat: any) => 
+      chat.name || chat.participants?.map((p: any) => p.displayName).join(', ') || 'Unknown'
+    ).join(', ');
+    
+    console.log(`❌ No ${platform} chat found for "${contactName}". Available: ${availableContacts}`);
+    return null;
+  } catch (error) {
+    console.error(`Error finding ${platform} chat:`, error);
+    return null;
+  }
+}
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
@@ -67,27 +131,26 @@ export async function POST(request: NextRequest) {
     if (body.platform && body.contact && body.text) {
       console.log('📧 Direct API request detected:', { platform: body.platform, contact: body.contact, text: body.text });
       
-      const beeperClient = new BeeperClient();
-      
       try {
-        if (body.platform === 'instagram') {
-          await beeperClient.sendInstagramMessage(body.contact, body.text);
-          return NextResponse.json({
-            success: true,
-            message: `Message sent to ${body.contact} on Instagram: "${body.text}"`
-          });
-        } else if (body.platform === 'discord') {
-          await beeperClient.sendDiscordMessage(body.contact, body.text);
-          return NextResponse.json({
-            success: true,
-            message: `Message sent to ${body.contact} on Discord: "${body.text}"`
-          });
-        } else {
-          return NextResponse.json({
-            success: false,
-            error: `${body.platform} is not supported yet. Currently available: Instagram, Discord.`
-          }, { status: 400 });
+        const accessToken = process.env.NEXT_PUBLIC_BEEPER_ACCESS_TOKEN;
+        if (!accessToken) {
+          throw new Error('Beeper access token not configured');
         }
+
+        // Find the chat for the contact on the specified platform
+        const chatID = await findChatForContact(body.contact, body.platform, accessToken);
+        
+        if (!chatID) {
+          throw new Error(`No ${body.platform} chat found with "${body.contact}". Make sure you have an existing conversation.`);
+        }
+
+        // Send message using the same backend as the rest of the app
+        await sendMessage({ chatID, text: body.text }, accessToken);
+        
+        return NextResponse.json({
+          success: true,
+          message: `Message sent to ${body.contact} on ${body.platform}: "${body.text}"`
+        });
       } catch (error) {
         console.error(`Error sending ${body.platform} message:`, error);
         return NextResponse.json({
@@ -131,42 +194,31 @@ export async function POST(request: NextRequest) {
             
             console.log('📧 Sending message:', { recipient, message, platform });
             
-            const beeperClient = new BeeperClient();
-            
             try {
-              if (platform === 'instagram') {
-                await beeperClient.sendInstagramMessage(recipient, message);
-                return NextResponse.json({
-                  message: {
-                    type: 'function_result',
-                    content: JSON.stringify({
-                      success: true,
-                      message: `Message sent to ${recipient} on Instagram: "${message}"`
-                    })
-                  }
-                });
-              } else if (platform === 'discord') {
-                await beeperClient.sendDiscordMessage(recipient, message);
-                return NextResponse.json({
-                  message: {
-                    type: 'function_result',
-                    content: JSON.stringify({
-                      success: true,
-                      message: `Message sent to ${recipient} on Discord: "${message}"`
-                    })
-                  }
-                });
-              } else {
-                return NextResponse.json({
-                  message: {
-                    type: 'function_result',
-                    content: JSON.stringify({
-                      success: false,
-                      error: `${platform} is not supported yet. Currently available: Instagram, Discord.`
-                    })
-                  }
-                });
+              const accessToken = process.env.NEXT_PUBLIC_BEEPER_ACCESS_TOKEN;
+              if (!accessToken) {
+                throw new Error('Beeper access token not configured');
               }
+
+              // Find the chat for the contact on the specified platform
+              const chatID = await findChatForContact(recipient, platform, accessToken);
+              
+              if (!chatID) {
+                throw new Error(`No ${platform} chat found with "${recipient}". Make sure you have an existing conversation.`);
+              }
+
+              // Send message using the same backend as the rest of the app
+              await sendMessage({ chatID, text: message }, accessToken);
+              
+              return NextResponse.json({
+                message: {
+                  type: 'function_result',
+                  content: JSON.stringify({
+                    success: true,
+                    message: `Message sent to ${recipient} on ${platform}: "${message}"`
+                  })
+                }
+              });
             } catch (error) {
               console.error(`Error sending ${platform} message:`, error);
               return NextResponse.json({
@@ -211,10 +263,20 @@ export async function POST(request: NextRequest) {
               });
             }
 
-            // Send message through Beeper
+            // Send message through Beeper using same backend as rest of app
             try {
-              const beeperClient = new BeeperClient();
-              await beeperClient.sendInstagramMessage(command.recipient, command.message);
+              const accessToken = process.env.NEXT_PUBLIC_BEEPER_ACCESS_TOKEN;
+              if (!accessToken) {
+                throw new Error('Beeper access token not configured');
+              }
+
+              const chatID = await findChatForContact(command.recipient, 'instagram', accessToken);
+              
+              if (!chatID) {
+                throw new Error(`No Instagram chat found with "${command.recipient}". Make sure you have an existing conversation.`);
+              }
+
+              await sendMessage({ chatID, text: command.message }, accessToken);
               
               return NextResponse.json({
                 message: {
@@ -227,7 +289,7 @@ export async function POST(request: NextRequest) {
               return NextResponse.json({
                 message: {
                   type: 'error',
-                  content: `Failed to send message to ${command.recipient}. Make sure they're in your Instagram contacts.`
+                  content: `Failed to send message to ${command.recipient}. Error: ${error instanceof Error ? error.message : 'Unknown error'}`
                 }
               });
             }
