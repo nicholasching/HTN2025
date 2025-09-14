@@ -1940,7 +1940,7 @@ Generate a flirty response that builds attraction and romantic interest:`;
                       <span className="text-xs">Sending...</span>
                     </div>
                   ) : (
-                    '📤 Send'
+                    'Send'
                   )}
                 </button>
               </div>
