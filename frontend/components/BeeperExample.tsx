@@ -873,29 +873,24 @@ Generate a natural, contextual response:`,
                           (message.senderName && message.senderName.toLowerCase().includes('you')) ||
                           (message.sender && message.sender.isSelf);
         
-        // If it's unread and not from user, this is our target
-        if (isUnread && !isFromUser) {
+        // Additional check: only respond to messages that are recent (within last 5 minutes)
+        // This prevents responding to old messages that might be marked as unread
+        const messageTime = new Date(message.timestamp || 0).getTime();
+        const fiveMinutesAgo = Date.now() - (5 * 60 * 1000);
+        const isRecent = messageTime > fiveMinutesAgo;
+        
+        // If it's unread, not from user, and recent, this is our target
+        if (isUnread && !isFromUser && isRecent) {
           latestUnreadMessage = message;
           break;
         }
       }
       
-      // If no unread messages found, check the latest message anyway (fallback)
-      if (!latestUnreadMessage) {
-        const latestMessage = sortedMessages[0];
-        const isFromUser = latestMessage.isSender || 
-                          latestMessage.isMe || 
-                          (latestMessage.senderName && latestMessage.senderName.toLowerCase().includes('you')) ||
-                          (latestMessage.sender && latestMessage.sender.isSelf);
-        
-        if (!isFromUser) {
-          latestUnreadMessage = latestMessage;
-          console.log('📝 Using latest message as fallback (no unread flag detected)');
-        }
-      }
+      // Only proceed if we found an actual unread message
+      // Remove the fallback logic that responds to non-unread messages
       
       if (!latestUnreadMessage) {
-        console.log('📭 No unread messages from other users found');
+        console.log('📭 No unread messages from other users found - AI agent will not respond');
         return;
       }
 
@@ -1503,12 +1498,6 @@ Generate a flirty response that builds attraction and romantic interest:`;
                    )}
                  </h2>
                  <div className="flex items-center gap-2">
-                   {isGeneratingResponse && (
-                     <div className="flex items-center gap-2 text-blue-400">
-                       <div className="w-4 h-4 border-2 border-blue-400 border-t-transparent rounded-full animate-spin"></div>
-                       <span className="text-xs">AI Thinking...</span>
-                     </div>
-                   )}
                    {loading && (
                      <div className="flex items-center gap-2 text-green-400">
                        <div className="w-4 h-4 border-2 border-green-400 border-t-transparent rounded-full animate-spin"></div>
@@ -1557,19 +1546,11 @@ Generate a flirty response that builds attraction and romantic interest:`;
                    <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
                    <span className="text-xs text-blue-300 font-medium">AI Agent Active</span>
                    <span className="text-xs text-blue-400/70">•</span>
-                   <span className="text-xs text-blue-400/70">
-                     {agentInstructionsMap[selectedChat].length} chars
-                   </span>
-                   <span className="text-xs text-blue-400/70">•</span>
                    <span className="text-xs text-blue-400/70 truncate max-w-xs">
-                     {agentInstructionsMap[selectedChat].length > 50 
-                       ? `${agentInstructionsMap[selectedChat].substring(0, 50)}...` 
+                     {agentInstructionsMap[selectedChat].length > 100 
+                       ? `${agentInstructionsMap[selectedChat].substring(0, 100)}...` 
                        : agentInstructionsMap[selectedChat]
                      }
-                   </span>
-                   <span className="text-xs text-blue-400/70">•</span>
-                   <span className="text-xs text-blue-400/70">
-                     Checking every 3s
                    </span>
                  </div>
                  <div className="flex items-center gap-2">
