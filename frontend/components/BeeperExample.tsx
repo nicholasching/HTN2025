@@ -63,9 +63,12 @@ export default function BeeperExample() {
   const [aiNotConfident, setAiNotConfident] = useState<boolean>(false);
   const [isLoadingMessages, setIsLoadingMessages] = useState<boolean>(false);
   const [messageLoadProgress, setMessageLoadProgress] = useState<string>('');
+  const [isPollingMessages, setIsPollingMessages] = useState<boolean>(false);
   const draftGeneratedForChat = useRef<string>('');
   const lastMessageRef = useRef<HTMLDivElement>(null);
   const [expandedSummaryId, setExpandedSummaryId] = useState<string | null>(null);
+  const previousMessageCount = useRef<number>(0);
+  const lastMessageId = useRef<string>('');
 
   // Load access token from environment variable on component mount
   useEffect(() => {
@@ -254,13 +257,30 @@ export default function BeeperExample() {
 
     const pollCurrentChat = async () => {
       try {
+        setIsPollingMessages(true);
         const newMessages = await fetchMessages(selectedChat, 100, accessToken, {}, true);
-        if (newMessages && newMessages.length !== messages.length) {
-          setMessages(newMessages);
-          console.log('📨 New messages detected in current chat, updated message list');
+        
+        if (newMessages && newMessages.length > 0) {
+          const currentMessageCount = newMessages.length;
+          const currentLastMessageId = newMessages[newMessages.length - 1]?.id || '';
+          
+          // Check if messages have actually changed
+          const hasNewMessages = (
+            currentMessageCount !== previousMessageCount.current ||
+            currentLastMessageId !== lastMessageId.current
+          );
+          
+          if (hasNewMessages) {
+            setMessages(newMessages);
+            previousMessageCount.current = currentMessageCount;
+            lastMessageId.current = currentLastMessageId;
+            console.log('📨 New messages detected in current chat, updated message list');
+          }
         }
       } catch (error) {
         console.error('Error polling current chat:', error);
+      } finally {
+        setIsPollingMessages(false);
       }
     };
 
@@ -269,7 +289,7 @@ export default function BeeperExample() {
     const interval = setInterval(pollCurrentChat, 3000);
 
     return () => clearInterval(interval);
-  }, [accessToken, selectedChat, messages.length]);
+  }, [accessToken, selectedChat]); // Removed messages.length from dependencies
 
   // Auto-scroll to bottom when messages change
   useEffect(() => {
@@ -501,6 +521,9 @@ export default function BeeperExample() {
       setIsGeneratingDraft(false);
       setAiNotConfident(false);
       draftGeneratedForChat.current = ''; // Reset the draft tracking
+      // Reset polling refs for new chat
+      previousMessageCount.current = 0;
+      lastMessageId.current = '';
     }
     
     // Always set the selected chat, even if we fail to load messages
@@ -513,6 +536,13 @@ export default function BeeperExample() {
       const messagesData = await fetchMessages(chatID, 100, accessToken, {}, true);
       setMessages(messagesData);
       setMessageLoadProgress(`Loaded ${messagesData.length} messages`);
+      
+      // Update polling refs with initial message data
+      if (messagesData && messagesData.length > 0) {
+        previousMessageCount.current = messagesData.length;
+        lastMessageId.current = messagesData[messagesData.length - 1]?.id || '';
+      }
+      
       // Ensure we scroll to bottom after loading messages
       setTimeout(scrollToBottom, 100);
       
