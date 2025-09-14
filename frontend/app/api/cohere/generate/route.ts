@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 
 export async function POST(request: NextRequest) {
   try {
-    const { message, instructions, contextMessages } = await request.json();
+    const { message, instructions, contextMessages, latestSender, hasIntroduced, lastBotMessage } = await request.json();
 
     if (!message || !instructions) {
       return NextResponse.json(
@@ -20,17 +20,29 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Prepare the prompt for Cohere
+    // Prepare the prompt for Cohere with enhanced context handling
     let prompt = `You are an AI assistant that responds to messages based on specific instructions. 
 
 Instructions: ${instructions}
 
-${contextMessages ? `Recent conversation context:
+${contextMessages ? `CONVERSATION HISTORY (for context only):
 ${contextMessages}
 
-` : ''}Message to respond to: ${message}
+` : ''}CURRENT MESSAGE TO RESPOND TO: ${message}
+${latestSender ? `(This message is from: ${latestSender})` : ''}
 
-Please provide a helpful response based on the instructions and conversation context. If you're not confident you can provide a good answer, respond with "I'm not sure how to respond to this. Please let me know if you need any clarification."
+${hasIntroduced ? `CONVERSATION CONTEXT: You have already introduced yourself in this conversation. Do NOT repeat your introduction or mention who you are again.` : ''}
+${lastBotMessage ? `YOUR LAST MESSAGE: "${lastBotMessage}" - Do NOT repeat this message or similar content.` : ''}
+
+IMPORTANT RESPONSE GUIDELINES:
+- Respond ONLY to the current message above, not to the conversation history
+- Do NOT introduce yourself or mention that you're an AI assistant
+- Do NOT repeat information from previous messages unless directly relevant
+- Do NOT repeat your last message or similar content
+- Keep your response natural and conversational
+- Match the tone and style of the conversation
+- Be helpful and engaging without being repetitive
+- If you're not confident you can provide a good answer, respond with "I'm not sure how to respond to this. Please let me know if you need any clarification."
 
 Respond in a natural, conversational tone that matches the context. Keep responses concise but helpful.`;
 

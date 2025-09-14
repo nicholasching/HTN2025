@@ -37,6 +37,10 @@ export default function BeeperExample() {
   const [dismissedSummaries, setDismissedSummaries] = useState<Set<string>>(new Set());
   const [chatSummaries, setChatSummaries] = useState<Record<string, { messages: Message[], unreadCount: number }>>({});
   
+  // Conversation flow tracking to prevent repetitive introductions
+  const [botIntroducedInChat, setBotIntroducedInChat] = useState<Set<string>>(new Set());
+  const [lastBotMessageInChat, setLastBotMessageInChat] = useState<Record<string, string>>({});
+  
   // Settings states
   const [showSettings, setShowSettings] = useState<boolean>(false);
   const [flirtIntensity, setFlirtIntensity] = useState<'mild' | 'medium' | 'hot'>('medium');
@@ -700,18 +704,67 @@ export default function BeeperExample() {
     }, 50);
   };
 
+  // Check if bot has already introduced itself in this chat
+  const hasBotIntroducedItself = (chatId: string, messages: Message[]): boolean => {
+    if (botIntroducedInChat.has(chatId)) {
+      return true;
+    }
+
+    // Check if any previous message from the user contains introduction patterns
+    const introductionPatterns = [
+      /i am/i, /i'm/i, /my name is/i, /i work for/i, /i represent/i,
+      /i sell/i, /i have/i, /i can help/i, /i offer/i, /i provide/i
+    ];
+
+    for (const msg of messages) {
+      const isFromUser = msg.isSender || 
+                        msg.isMe || 
+                        (msg.senderName && msg.senderName.toLowerCase().includes('you')) ||
+                        (msg.sender && msg.sender.isSelf);
+      
+      if (isFromUser && msg.text) {
+        const text = msg.text.toLowerCase();
+        if (introductionPatterns.some(pattern => pattern.test(text))) {
+          setBotIntroducedInChat(prev => new Set(prev).add(chatId));
+          return true;
+        }
+      }
+    }
+
+    return false;
+  };
+
   // Generate AI response using Cohere API
   const generateAIResponse = async (message: string, contextMessages: Message[] = []): Promise<{ response: string; confidence: number }> => {
     try {
-      // Format context messages as a string
-      const contextString = contextMessages.slice(0, 25).map(msg => {
+      // Sort messages by timestamp (oldest first) for proper conversation flow
+      const sortedMessages = contextMessages.sort((a, b) => {
+        const aTime = new Date(a.timestamp || 0).getTime();
+        const bTime = new Date(b.timestamp || 0).getTime();
+        return aTime - bTime;
+      });
+
+      // Format context messages as a string with better structure
+      const contextString = sortedMessages.slice(-20).map((msg, index) => {
         const senderName = msg.senderName || 
                          msg.sender?.name || 
                          msg.sender?.displayName || 
                          (msg.isSender ? 'You' : 'Other');
         const text = msg.text || '';
-        return `${senderName}: ${text}`;
+        const timestamp = msg.timestamp ? new Date(msg.timestamp).toLocaleTimeString() : '';
+        return `${index + 1}. ${senderName} (${timestamp}): ${text}`;
       }).join('\n');
+
+      // Get the most recent message details for better context
+      const latestMessage = sortedMessages[sortedMessages.length - 1];
+      const latestSender = latestMessage?.senderName || 
+                          latestMessage?.sender?.name || 
+                          latestMessage?.sender?.displayName || 
+                          (latestMessage?.isSender ? 'You' : 'Other');
+
+      // Check if bot has already introduced itself
+      const hasIntroduced = hasBotIntroducedItself(selectedChat, sortedMessages);
+      const lastBotMessage = lastBotMessageInChat[selectedChat] || '';
 
       const response = await fetch('/api/cohere/generate', {
         method: 'POST',
@@ -721,7 +774,10 @@ export default function BeeperExample() {
         body: JSON.stringify({
           message,
           instructions: agentInstructionsMap[selectedChat] || '',
-          contextMessages: contextString
+          contextMessages: contextString,
+          latestSender: latestSender,
+          hasIntroduced: hasIntroduced,
+          lastBotMessage: lastBotMessage
         }),
       });
 
@@ -744,15 +800,15 @@ export default function BeeperExample() {
         return { response: '', shouldShowNotConfident: false };
       }
 
-      // Sort messages by timestamp (newest first) to find the latest message
+      // Sort messages by timestamp (oldest first) for proper conversation flow
       const sortedMessages = messages.sort((a, b) => {
         const aTime = new Date(a.timestamp || 0).getTime();
         const bTime = new Date(b.timestamp || 0).getTime();
-        return bTime - aTime;
+        return aTime - bTime;
       });
 
-      // Get the latest message
-      const latestMessage = sortedMessages[0];
+      // Get the latest message (last in the sorted array)
+      const latestMessage = sortedMessages[sortedMessages.length - 1];
       if (!latestMessage) {
         return { response: '', shouldShowNotConfident: false };
       }
@@ -768,15 +824,26 @@ export default function BeeperExample() {
         return { response: '', shouldShowNotConfident: false };
       }
 
-      // Format context for draft generation
-      const contextString = messages.slice(0, 10).map(msg => {
+      // Format context for draft generation with better structure
+      const contextString = sortedMessages.slice(-15).map((msg, index) => {
         const senderName = msg.senderName || 
                          msg.sender?.name || 
                          msg.sender?.displayName || 
                          (msg.isSender ? 'You' : 'Other');
         const text = msg.text || '';
-        return `${senderName}: ${text}`;
+        const timestamp = msg.timestamp ? new Date(msg.timestamp).toLocaleTimeString() : '';
+        return `${index + 1}. ${senderName} (${timestamp}): ${text}`;
       }).join('\n');
+
+      // Get the most recent message details
+      const latestSender = latestMessage.senderName || 
+                          latestMessage.sender?.name || 
+                          latestMessage.sender?.displayName || 
+                          (latestMessage.isSender ? 'You' : 'Other');
+
+      // Check if bot has already introduced itself
+      const hasIntroduced = hasBotIntroducedItself(selectedChat, sortedMessages);
+      const lastBotMessage = lastBotMessageInChat[selectedChat] || '';
 
       const response = await fetch('/api/cohere/generate', {
         method: 'POST',
@@ -793,6 +860,9 @@ CONTEXT ANALYSIS:
 - Consider the appropriate response based on the conversation flow
 
 RESPONSE GUIDELINES:
+- Respond ONLY to the most recent message, not to the conversation history
+- Do NOT introduce yourself or mention that you're an AI assistant
+- Do NOT repeat information from previous messages unless directly relevant
 - Be conversational and natural, matching the tone of the conversation
 - Directly address what the other person said or asked
 - Keep it brief (1-2 sentences, 15-30 words)
@@ -807,7 +877,10 @@ ${contextString}
 LATEST MESSAGE TO RESPOND TO: ${latestMessage.text || ''}
 
 Generate a natural, contextual response:`,
-          contextMessages: contextString
+          contextMessages: contextString,
+          latestSender: latestSender,
+          hasIntroduced: hasIntroduced,
+          lastBotMessage: lastBotMessage
         }),
       });
 
@@ -931,6 +1004,12 @@ Generate a natural, contextual response:`,
           console.log('📤 Send result:', sendResult);
           
           if (sendResult.success) {
+            // Track the bot's last message to prevent repetition
+            setLastBotMessageInChat(prev => ({
+              ...prev,
+              [selectedChat]: response.trim()
+            }));
+            
             // Refresh messages to show the response
             setTimeout(async () => {
               await handleFetchMessages(selectedChat);
