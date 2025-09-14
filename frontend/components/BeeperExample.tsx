@@ -4,7 +4,6 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { fetchAccounts, fetchChats, fetchMessages, fetchMessagesLimited } from '@/lib/beeper';
 import type { Account, Chat, Message } from '@/lib/beeper';
 import { sendMessage } from '@/lib/beeper/postMessages';
-import HoverableText from './HoverableText';
 import ChatSummaryOverlay from './ChatSummaryOverlay';
 import NetworkIcon from './NetworkIcon';
 import SettingsPage from './SettingsPage';
@@ -1754,14 +1753,11 @@ Generate a flirty response that builds attraction and romantic interest:`;
                                </span>
                              )}
                            </div>
-                           <HoverableText 
-                             text={content}
-                             accountId={selectedAccount}
-                             chatId={selectedChat}
-                             className={`text-sm leading-relaxed break-words ${
-                               isUnread ? 'text-white font-medium' : 'text-gray-200'
-                             }`}
-                           />
+                           <div className={`text-sm leading-relaxed break-words ${
+                             isUnread ? 'text-white font-medium' : 'text-gray-200'
+                           }`}>
+                             {content}
+                           </div>
                          </div>
                        </div>
                      </div>
