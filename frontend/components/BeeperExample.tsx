@@ -1405,7 +1405,7 @@ Generate a flirty response that builds attraction and romantic interest:`;
                   </svg>
                 </div>
               </div>
-              <div className="overflow-y-auto flex-1">
+              <div className="overflow-y-auto flex-1 custom-scrollbar">
                 {filteredChats.length === 0 ? (
                   <div className="p-4 text-center text-gray-400">
                     <div className="text-sm">
@@ -1578,7 +1578,7 @@ Generate a flirty response that builds attraction and romantic interest:`;
               </>
             )}
              
-            <div id="messages-container" className="flex-1 overflow-y-auto space-y-1 min-h-0">
+            <div id="messages-container" className="flex-1 overflow-y-auto space-y-1 min-h-0 custom-scrollbar">
                 {loading && selectedChat && messages.length === 0 ? (
                   // Loading state for messages
                   <div className="p-4 text-center">
@@ -1887,7 +1887,7 @@ Generate a flirty response that builds attraction and romantic interest:`;
             </div>
 
             {/* Content */}
-            <div className="p-4 space-y-4 max-h-[60vh] overflow-y-auto">
+            <div className="p-4 space-y-4 max-h-[60vh] overflow-y-auto custom-scrollbar">
               {/* Text Comparison */}
               <div className="space-y-4">
                 {/* Original Text */}
