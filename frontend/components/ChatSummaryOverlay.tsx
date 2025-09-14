@@ -38,7 +38,7 @@ export default function ChatSummaryOverlay({
 
   // Generate summary when component mounts
   useEffect(() => {
-    if (unreadCount === 0 || !messages || messages.length === 0 || !chatId) {
+    if (unreadCount < 5 || !messages || messages.length === 0 || !chatId) {
       return;
     }
 

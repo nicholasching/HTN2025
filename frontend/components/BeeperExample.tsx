@@ -4,12 +4,9 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { fetchAccounts, fetchChats, fetchMessages, fetchMessagesLimited } from '@/lib/beeper';
 import type { Account, Chat, Message } from '@/lib/beeper';
 import { sendMessage } from '@/lib/beeper/postMessages';
-import SimpleWingman from './SimpleWingman';
-// Remove ChatSummary import since we're deleting that file
-// import ChatSummary from './ChatSummary';
 import HoverableText from './HoverableText';
 import ChatSummaryOverlay from './ChatSummaryOverlay';
-import ProfessionalTextFloatingWidget from './ProfessionalTextFloatingWidget';
+import SettingsPage from './SettingsPage';
 
 export default function BeeperExample() {
   const [accessToken, setAccessToken] = useState<string | null>(null);
@@ -37,6 +34,25 @@ export default function BeeperExample() {
   const checkTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const [dismissedSummaries, setDismissedSummaries] = useState<Set<string>>(new Set());
   const [chatSummaries, setChatSummaries] = useState<Record<string, { messages: Message[], unreadCount: number }>>({});
+  
+  // Settings states
+  const [showSettings, setShowSettings] = useState<boolean>(false);
+  const [flirtIntensity, setFlirtIntensity] = useState<'mild' | 'medium' | 'hot'>('medium');
+  const [responseLength, setResponseLength] = useState<'short' | 'medium' | 'long'>('medium');
+  const [customContext, setCustomContext] = useState<string>('');
+  
+  // Unified autocomplete states
+  const [autocompleteMode, setAutocompleteMode] = useState<'general' | 'flirty' | 'professional'>('general');
+  const [showAutocompleteSettings, setShowAutocompleteSettings] = useState<boolean>(false);
+  const [isGeneratingAutocomplete, setIsGeneratingAutocomplete] = useState<boolean>(false);
+  const [autocompleteError, setAutocompleteError] = useState<string | null>(null);
+  const [professionalText, setProfessionalText] = useState<string>('');
+  const [originalText, setOriginalText] = useState<string>('');
+  const [showProfessionalPopup, setShowProfessionalPopup] = useState<boolean>(false);
+  
+  // Professional mode debounce
+  const professionalTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const lastProcessedTextRef = useRef<string>('');
   
   // Auto-draft response states
   const [autoDraftResponse, setAutoDraftResponse] = useState<string>('');
@@ -73,12 +89,142 @@ export default function BeeperExample() {
     }
   }, []);
 
+  // Load settings from localStorage on component mount
+  useEffect(() => {
+    const savedFlirtIntensity = localStorage.getItem('beeper-flirt-intensity');
+    if (savedFlirtIntensity) {
+      setFlirtIntensity(savedFlirtIntensity as 'mild' | 'medium' | 'hot');
+    }
+    
+    const savedResponseLength = localStorage.getItem('beeper-response-length');
+    if (savedResponseLength) {
+      setResponseLength(savedResponseLength as 'short' | 'medium' | 'long');
+    }
+    
+    const savedCustomContext = localStorage.getItem('beeper-custom-context');
+    if (savedCustomContext) {
+      setCustomContext(savedCustomContext);
+    }
+  }, []);
+
   // Save agent instructions to localStorage whenever they change
   useEffect(() => {
     if (Object.keys(agentInstructionsMap).length > 0) {
       localStorage.setItem('beeper-agent-instructions', JSON.stringify(agentInstructionsMap));
     }
   }, [agentInstructionsMap]);
+
+  // Save settings to localStorage whenever they change
+  useEffect(() => {
+    localStorage.setItem('beeper-flirt-intensity', flirtIntensity);
+  }, [flirtIntensity]);
+
+  useEffect(() => {
+    localStorage.setItem('beeper-response-length', responseLength);
+  }, [responseLength]);
+
+  useEffect(() => {
+    localStorage.setItem('beeper-custom-context', customContext);
+  }, [customContext]);
+
+  // Professional mode: Auto-generate when user stops typing for 3 seconds (minimum 25 characters)
+  useEffect(() => {
+    if (autocompleteMode !== 'professional' || !messageInput.trim() || !selectedChat) {
+      return;
+    }
+
+    // Only generate if there are at least 25 characters
+    if (messageInput.trim().length < 25) {
+      return;
+    }
+
+    // Clear existing timeout
+    if (professionalTimeoutRef.current) {
+      clearTimeout(professionalTimeoutRef.current);
+    }
+
+    // Don't process if text hasn't changed
+    if (messageInput.trim() === lastProcessedTextRef.current) {
+      return;
+    }
+
+    // Set new timeout
+    professionalTimeoutRef.current = setTimeout(async () => {
+      if (messageInput.trim() && messageInput.trim() !== lastProcessedTextRef.current && messageInput.trim().length >= 25) {
+        lastProcessedTextRef.current = messageInput.trim();
+        await generateProfessionalTextForDraft(messageInput.trim());
+      }
+    }, 3000);
+
+    return () => {
+      if (professionalTimeoutRef.current) {
+        clearTimeout(professionalTimeoutRef.current);
+      }
+    };
+  }, [messageInput, autocompleteMode, selectedChat]);
+
+  // Stop generation when user starts typing in general/flirt modes
+  // For professional mode, also clear states when input is less than 25 characters
+  useEffect(() => {
+    if (messageInput.trim()) {
+      if (autocompleteMode === 'general' || autocompleteMode === 'flirty') {
+        // User started typing, clear any existing draft and stop generation
+        setAutoDraftResponse('');
+        setShowDraftIndicator(false);
+        setAiNotConfident(false);
+        setAutocompleteError(null);
+        // Reset the draft generation flag so we can generate again when input is cleared
+        draftGeneratedForChat.current = '';
+      } else if (autocompleteMode === 'professional' && messageInput.trim().length < 25) {
+        // For professional mode, clear states when input is less than 25 characters
+        setAutoDraftResponse('');
+        setShowDraftIndicator(false);
+        setAiNotConfident(false);
+        setAutocompleteError(null);
+      }
+    }
+  }, [messageInput, autocompleteMode]);
+
+  // Trigger generation when message input is cleared (like original route.ts behavior)
+  useEffect(() => {
+    const triggerGenerationOnClear = async () => {
+      // Only trigger if message input is empty, we have messages, and we're not already generating
+      if (!messageInput.trim() && messages.length > 0 && !isGeneratingDraft && !isGeneratingAutocomplete && selectedChat) {
+        // Don't generate if we already generated a draft for this chat
+        if (draftGeneratedForChat.current === selectedChat) {
+          return;
+        }
+
+        console.log('🤖 Message input cleared, triggering generation...');
+        
+        if (autocompleteMode === 'general') {
+          try {
+            const result = await generateAutoDraftResponse(messages);
+            if (result.response.trim()) {
+              setAutoDraftResponse(result.response);
+              setShowDraftIndicator(true);
+              setAiNotConfident(false);
+              draftGeneratedForChat.current = selectedChat;
+            } else {
+              setShowDraftIndicator(false);
+              setAiNotConfident(result.shouldShowNotConfident);
+            }
+          } catch (error) {
+            console.error('Error generating draft on clear:', error);
+            setShowDraftIndicator(false);
+            setAiNotConfident(true);
+          }
+        } else if (autocompleteMode === 'flirty') {
+          await generateFlirtySuggestion();
+        }
+        // Professional mode doesn't need to trigger on clear since it works on input
+      }
+    };
+
+    // Add a small delay to ensure the clear action is complete
+    const timeoutId = setTimeout(triggerGenerationOnClear, 200);
+    return () => clearTimeout(timeoutId);
+  }, [messageInput, messages, selectedChat, autocompleteMode, isGeneratingDraft, isGeneratingAutocomplete]);
 
   // Filter chats based on search query
   useEffect(() => {
@@ -139,7 +285,7 @@ export default function BeeperExample() {
   // Generate auto-draft response when a chat is opened (if last message wasn't from user)
   useEffect(() => {
     const generateDraftForNewChat = async () => {
-      if (!selectedChat || messages.length === 0 || isGeneratingDraft) {
+      if (!selectedChat || messages.length === 0 || isGeneratingDraft || isGeneratingAutocomplete) {
         return;
       }
 
@@ -158,16 +304,22 @@ export default function BeeperExample() {
       setShowDraftIndicator(true);
 
       try {
-        const draftResponse = await generateAutoDraftResponse(messages);
-        if (draftResponse.trim()) {
-          setAutoDraftResponse(draftResponse);
-          setAiNotConfident(false);
-          draftGeneratedForChat.current = selectedChat; // Mark that we've generated a draft for this chat
-          console.log('✅ Auto-draft generated:', draftResponse.substring(0, 50) + '...');
-        } else {
-          setShowDraftIndicator(false);
-          setAiNotConfident(true);
-          console.log('⏭️ No auto-draft generated (AI not confident or last message was from user)');
+        if (autocompleteMode === 'general') {
+          const result = await generateAutoDraftResponse(messages);
+          if (result.response.trim()) {
+            setAutoDraftResponse(result.response);
+            setAiNotConfident(false);
+            draftGeneratedForChat.current = selectedChat; // Mark that we've generated a draft for this chat
+            console.log('✅ Auto-draft generated:', result.response.substring(0, 50) + '...');
+          } else {
+            setShowDraftIndicator(false);
+            setAiNotConfident(result.shouldShowNotConfident);
+            console.log('⏭️ No auto-draft generated (AI not confident or last message was from user)');
+          }
+        } else if (autocompleteMode === 'flirty') {
+          // Generate flirty suggestion automatically
+          await generateFlirtySuggestion();
+          return; // generateFlirtySuggestion handles its own state
         }
       } catch (error) {
         console.error('❌ Error generating auto-draft:', error);
@@ -181,7 +333,7 @@ export default function BeeperExample() {
     // Add a small delay to ensure messages are fully loaded
     const timeoutId = setTimeout(generateDraftForNewChat, 500);
     return () => clearTimeout(timeoutId);
-  }, [selectedChat, messages, messageInput, isGeneratingDraft]);
+  }, [selectedChat, messages, messageInput, isGeneratingDraft, isGeneratingAutocomplete, autocompleteMode]);
 
   // Full workflow function that mimics test.ts behavior
   const runFullWorkflow = async (token: string) => {
@@ -423,7 +575,14 @@ export default function BeeperExample() {
 
   // Accept the auto-draft response
   const acceptAutoDraft = () => {
-    setMessageInput(autoDraftResponse);
+    if (autocompleteMode === 'professional') {
+      // For professional mode, replace the current content
+      setMessageInput(autoDraftResponse);
+    } else {
+      // For general and flirty modes, fill the input
+      setMessageInput(autoDraftResponse);
+    }
+    
     setAutoDraftResponse('');
     setShowDraftIndicator(false);
     setAiNotConfident(false);
@@ -517,10 +676,10 @@ export default function BeeperExample() {
   };
 
   // Generate auto-draft response for new chat
-  const generateAutoDraftResponse = async (messages: Message[]): Promise<string> => {
+  const generateAutoDraftResponse = async (messages: Message[]): Promise<{response: string, shouldShowNotConfident: boolean}> => {
     try {
       if (messages.length === 0) {
-        return '';
+        return { response: '', shouldShowNotConfident: false };
       }
 
       // Sort messages by timestamp (newest first) to find the latest message
@@ -533,7 +692,7 @@ export default function BeeperExample() {
       // Get the latest message
       const latestMessage = sortedMessages[0];
       if (!latestMessage) {
-        return '';
+        return { response: '', shouldShowNotConfident: false };
       }
 
       // Check if the latest message is from the user
@@ -544,7 +703,7 @@ export default function BeeperExample() {
 
       // Only generate draft if the latest message is NOT from the user
       if (isFromUser) {
-        return '';
+        return { response: '', shouldShowNotConfident: false };
       }
 
       // Format context for draft generation
@@ -564,23 +723,13 @@ export default function BeeperExample() {
         },
         body: JSON.stringify({
           message: latestMessage.text || '',
-          instructions: `You are helping draft a response to a message. Generate a brief, helpful, and natural response that the user can send to the recipient.
+          instructions: `Please provide a brief, conversational response to this message. Focus on being brief and natural. Keep it very concise and appropriate for the context:
 
-IMPORTANT RULES:
-- Write the response as if YOU are the user responding to the recipient
-- Keep it conversational and appropriate for the context
-- Be helpful and engaging
-- Keep responses concise (1-2 sentences typically)
-- If you're not confident you can provide a good response, return exactly: "NO_CONFIDENT_RESPONSE"
-- Do not include any meta-commentary or explanations
-- Write in first person ("I", "me", "my") as if you are the user
-
-Context of recent conversation:
 ${contextString}
 
 Message to respond to: ${latestMessage.text || ''}
 
-Generate a natural response:`,
+Response:`,
           contextMessages: contextString
         }),
       });
@@ -594,13 +743,13 @@ Generate a natural response:`,
       
       // Check if the AI is not confident enough to respond
       if (responseText.trim() === 'NO_CONFIDENT_RESPONSE') {
-        return '';
+        return { response: '', shouldShowNotConfident: true };
       }
       
-      return responseText;
+      return { response: responseText, shouldShowNotConfident: false };
     } catch (error) {
       console.error('Error generating auto-draft response:', error);
-      return '';
+      return { response: '', shouldShowNotConfident: true };
     }
   };
 
@@ -858,6 +1007,266 @@ Generate a natural response:`,
       setDismissedSummaries(prev => new Set(prev).add(selectedChat));
     }
   };
+
+  // Settings update functions
+  const handleUpdateAgentInstructions = (chatId: string, instructions: string) => {
+    setAgentInstructionsMap(prev => ({
+      ...prev,
+      [chatId]: instructions
+    }));
+  };
+
+  const handleDeleteAgentInstructions = (chatId: string) => {
+    setAgentInstructionsMap(prev => {
+      const newMap = { ...prev };
+      delete newMap[chatId];
+      return newMap;
+    });
+  };
+
+  const handleUpdateFlirtIntensity = (intensity: 'mild' | 'medium' | 'hot') => {
+    setFlirtIntensity(intensity);
+  };
+
+  const handleUpdateResponseLength = (length: 'short' | 'medium' | 'long') => {
+    setResponseLength(length);
+  };
+
+  const handleUpdateCustomContext = (context: string) => {
+    setCustomContext(context);
+  };
+
+
+  const generateFlirtySuggestion = async () => {
+    if (!messages.length) {
+      setAutocompleteError('No chat context available');
+      return;
+    }
+
+    setIsGeneratingAutocomplete(true);
+    setAutocompleteError(null);
+
+    try {
+      // Extract recent messages for context
+      const recentMessages = messages.slice(-10).map((msg: any) => {
+        const senderName = msg.senderName || msg.sender?.displayName || 'Unknown';
+        const content = msg.text || msg.content?.text || msg.body || '';
+        const isMe = msg.isSender || senderName.toLowerCase().includes('nicholas') || senderName.toLowerCase().includes('you');
+        
+        return {
+          sender: isMe ? 'You' : senderName,
+          message: content
+        };
+      });
+
+      // Create intensity-based prompts
+      const intensityPrompts = {
+        mild: `1 sentence. Neutral and friendly.
+                Acknowledge what they said; no compliments, no invites.
+                No questions unless they asked one.`,
+        medium: `1–2 short sentences. Warm, lightly interested.
+                Use EITHER one soft compliment OR one light question (not both).
+                No invites.`,
+        hot: `1–2 short sentences. Very flirty and confident (PG).
+                Use EITHER a specific compliment + quick invite OR a playful tease + curious follow-up.
+                Make attraction obvious.`
+      };
+
+      // Build conversation history for the prompt
+      const conversationHistory = recentMessages
+        .map(msg => `${msg.sender}: ${msg.message}`)
+        .join('\n');
+
+      // Get the last message to identify who to respond to
+      const lastMessage = recentMessages[recentMessages.length - 1];
+      const respondingTo = lastMessage?.sender === 'You' ? 'the other person' : lastMessage?.sender || 'them';
+
+      const fullPrompt = `${intensityPrompts[flirtIntensity]}
+
+${customContext ? `Additional context: ${customContext}\n\n` : ''}Conversation context:
+${conversationHistory}
+
+You are the user. Write your response to ${respondingTo}:`;
+
+      const response = await fetch('/api/generate-flirt', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          context: [{ sender: 'System', message: fullPrompt }],
+          responseLength: responseLength,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`API error: ${response.status}`);
+      }
+
+      const data = await response.json();
+      const cleanSuggestion = data.suggestion.replace(/^["']|["']$/g, '');
+      setAutoDraftResponse(cleanSuggestion);
+      setShowDraftIndicator(true);
+      setAiNotConfident(false);
+      draftGeneratedForChat.current = selectedChat || ''; // Mark that we've generated a draft for this chat
+    } catch (err) {
+      console.error('Error generating flirty suggestion:', err);
+      setAutocompleteError(err instanceof Error ? err.message : 'Failed to generate suggestion');
+    } finally {
+      setIsGeneratingAutocomplete(false);
+    }
+  };
+
+  const generateProfessionalText = async (text: string) => {
+    setIsGeneratingAutocomplete(true);
+    setAutocompleteError(null);
+
+    try {
+      const response = await fetch('/api/generate-professional', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ text }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`API error: ${response.status}`);
+      }
+
+      const data = await response.json();
+      setOriginalText(data.originalText);
+      setProfessionalText(data.professionalText);
+      setShowProfessionalPopup(true);
+    } catch (err) {
+      console.error('Error generating professional text:', err);
+      setAutocompleteError(err instanceof Error ? err.message : 'Failed to generate professional text');
+    } finally {
+      setIsGeneratingAutocomplete(false);
+    }
+  };
+
+  const generateProfessionalTextForDraft = async (text: string) => {
+    setIsGeneratingAutocomplete(true);
+    setAutocompleteError(null);
+
+    try {
+      const response = await fetch('/api/generate-professional', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ text }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`API error: ${response.status}`);
+      }
+
+      const data = await response.json();
+      const professionalText = data.professionalText;
+      
+      if (professionalText.trim()) {
+        setAutoDraftResponse(professionalText);
+        setShowDraftIndicator(true);
+        setAiNotConfident(false);
+        console.log('✅ Professional draft generated:', professionalText.substring(0, 50) + '...');
+      } else {
+        setShowDraftIndicator(false);
+        setAiNotConfident(true);
+        console.log('⏭️ No professional draft generated');
+      }
+    } catch (err) {
+      console.error('Error generating professional text for draft:', err);
+      setAutocompleteError(err instanceof Error ? err.message : 'Failed to generate professional text');
+      setShowDraftIndicator(false);
+      setAiNotConfident(true);
+    } finally {
+      setIsGeneratingAutocomplete(false);
+    }
+  };
+
+  const handleAutocompleteModeChange = (newMode: 'general' | 'flirty' | 'professional') => {
+    setAutocompleteMode(newMode);
+    setAutoDraftResponse('');
+    setShowDraftIndicator(false);
+    setAutocompleteError(null);
+    setAiNotConfident(false);
+    
+    // Clear professional popup when switching away from professional mode
+    if (newMode !== 'professional') {
+      setShowProfessionalPopup(false);
+      setProfessionalText('');
+      setOriginalText('');
+    }
+    
+    // For professional mode, clear states if input is empty or less than 25 characters
+    if (newMode === 'professional') {
+      if (!messageInput.trim() || messageInput.trim().length < 25) {
+        setAutoDraftResponse('');
+        setShowDraftIndicator(false);
+        setAiNotConfident(false);
+        setAutocompleteError(null);
+        draftGeneratedForChat.current = '';
+        return; // Don't trigger generation for professional mode with insufficient text
+      }
+    }
+    
+    // Reset the draft generation flag so we can generate a new draft for this mode
+    draftGeneratedForChat.current = '';
+    
+    // If message input is empty and we have messages, trigger generation for the new mode
+    if (!messageInput.trim() && messages.length > 0) {
+      // Small delay to ensure state is updated
+      setTimeout(() => {
+        if (newMode === 'general') {
+          // Trigger general mode generation
+          const generateGeneralDraft = async () => {
+            try {
+              const result = await generateAutoDraftResponse(messages);
+              if (result.response.trim()) {
+                setAutoDraftResponse(result.response);
+                setShowDraftIndicator(true);
+                setAiNotConfident(false);
+                draftGeneratedForChat.current = selectedChat || '';
+              } else {
+                setShowDraftIndicator(false);
+                setAiNotConfident(result.shouldShowNotConfident);
+              }
+            } catch (error) {
+              console.error('Error generating general draft:', error);
+              setShowDraftIndicator(false);
+              setAiNotConfident(true);
+            }
+          };
+          generateGeneralDraft();
+        } else if (newMode === 'flirty') {
+          // Trigger flirty mode generation
+          generateFlirtySuggestion();
+        }
+        // Professional mode will be handled by the existing useEffect when user types
+      }, 100);
+    }
+  };
+
+
+  const handleUseProfessional = () => {
+    if (professionalText) {
+      setMessageInput(professionalText);
+      setShowProfessionalPopup(false);
+      setProfessionalText('');
+      setOriginalText('');
+    }
+  };
+
+  const handleUseOriginal = () => {
+    if (originalText) {
+      setMessageInput(originalText);
+      setShowProfessionalPopup(false);
+      setProfessionalText('');
+      setOriginalText('');
+    }
+  };
   // Get current chat data
   const currentChat = chats.find(chat => chat.id === selectedChat);
   const currentChatName = currentChat ? 
@@ -875,72 +1284,10 @@ Generate a natural response:`,
           animation: shimmer 2s ease-in-out infinite;
         }
       `}</style>
-      {/* Modern Header */}
-      <div className="bg-[#1a1a1a] border-b border-gray-800/50 backdrop-blur-lg">
-        <div className="max-w-[1600px] mx-auto px-6 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <div className="relative">
-                <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-pink-500 rounded-xl flex items-center justify-center shadow-lg shadow-purple-500/20">
-                  <span className="text-white font-bold text-lg">B</span>
-                </div>
-                <div className="absolute -bottom-1 -right-1 w-3 h-3 bg-green-400 rounded-full border-2 border-[#1a1a1a] animate-pulse"></div>
-              </div>
-              <div>
-                <h1 className="text-xl font-semibold text-white">Wingman AI</h1>
-                <p className="text-xs text-gray-400">Testing Dashboard v2.0</p>
-              </div>
-            </div>
-            
-            {/* Status and Actions */}
-            <div className="flex items-center gap-4">
-              {accessToken ? (
-                <div className="flex items-center gap-2 px-3 py-1.5 bg-green-500/10 border border-green-500/30 rounded-full">
-                  <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
-                  <span className="text-sm text-green-400 font-medium">API Connected</span>
-                </div>
-              ) : (
-                <div className="flex items-center gap-2 px-3 py-1.5 bg-red-500/10 border border-red-500/30 rounded-full">
-                  <div className="w-2 h-2 bg-red-400 rounded-full"></div>
-                  <span className="text-sm text-red-400 font-medium">Disconnected</span>
-                </div>
-              )}
-              <button
-                onClick={() => window.location.reload()}
-                className="p-2 hover:bg-gray-800/50 rounded-lg transition-all hover:scale-105"
-                title="Refresh Dashboard"
-              >
-                <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                </svg>
-              </button>
-            </div>
-          </div>
-          
-          {/* Progress Bar */}
-          {loading && (
-            <div className="mt-3">
-              <div className="w-full bg-gray-800/50 rounded-full h-1 overflow-hidden">
-                <div className="h-full bg-gradient-to-r from-purple-500 to-pink-500 rounded-full animate-shimmer" 
-                     style={{ width: '60%', animation: 'shimmer 2s ease-in-out infinite' }}></div>
-            </div>
-            <div className="text-xs text-gray-400 mt-1">{workflowStep}</div>
-          </div>
-        )}
-        
-        {/* Error Display */}
-        {error && (
-          <div className="max-w-6xl mx-auto mt-2 p-3 bg-red-900/50 border border-red-700 rounded-lg">
-            <div className="text-sm text-red-300">❌ {error}</div>
-            <div className="text-xs text-red-400 mt-1">Check browser console for details</div>
-          </div>
-        )}
-        </div>
-      </div>
 
       <div className="max-w-[1600px] mx-auto p-6">
         {/* Main Content Grid - Production Layout */}
-        <div className="flex gap-4" style={{ height: 'calc(100vh - 200px)' }}>
+        <div className="flex gap-4" style={{ height: 'calc(100vh - 3rem)' }}>
 
           {/* Network Sidebar - Compact Icon Bar */}
           <div className="w-16 bg-[#1a1a1a] rounded-xl border border-gray-800/50 flex flex-col items-center py-4 space-y-3">
@@ -968,7 +1315,7 @@ Generate a natural response:`,
 
           {/* Chats Panel - Compact Design */}
           {chats.length > 0 && (
-            <div className="flex-1 bg-[#1a1a1a] rounded-xl border border-gray-800/50 overflow-hidden flex flex-col">
+            <div className="w-80 bg-[#1a1a1a] rounded-xl border border-gray-800/50 overflow-hidden flex flex-col">
               <div className="p-4 border-b border-gray-800/50">
                 <div className="flex items-center justify-between mb-3">
                   <h2 className="text-lg font-semibold text-white">
@@ -1092,15 +1439,16 @@ Generate a natural response:`,
                        >
                          {agentEnabled ? '🤖 AI ON' : '🤖 AI OFF'}
                        </button>
-                       {agentInstructionsMap[selectedChat] && (
-                         <button
-                           onClick={handleEditInstructions}
-                           className="px-2 py-1.5 rounded-lg text-xs font-medium bg-blue-500/20 text-blue-400 border border-blue-500/30 hover:bg-blue-500/30 transition-all"
-                           title="Edit AI Agent Instructions"
-                         >
-                           ✏️ Edit
-                         </button>
-                       )}
+                       <button
+                         onClick={() => setShowSettings(true)}
+                         className="p-1.5 text-gray-400 hover:text-white hover:bg-gray-600/50 rounded transition-all"
+                         title="Settings"
+                       >
+                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                         </svg>
+                       </button>
                      </div>
                    )}
                  </div>
@@ -1147,7 +1495,7 @@ Generate a natural response:`,
              )}
              
             {/* Chat Summary Overlay */}
-            {selectedChat && !dismissedSummaries.has(selectedChat) && (
+            {selectedChat && !dismissedSummaries.has(selectedChat) && unreadCount >= 5 && (
               <>
                 {console.log('Rendering ChatSummaryOverlay with:', { 
                   selectedChat, 
@@ -1269,40 +1617,101 @@ Generate a natural response:`,
             
             {/* Message Input - Production Design */}
             <div className="p-4 border-t border-gray-800/50 bg-gray-800/30">
+              {/* Autocomplete Mode Selector */}
+              <div className="mb-3">
+                <div className="flex items-center gap-1 bg-gray-700/50 rounded-lg p-1 w-full">
+                  {(['general', 'flirty', 'professional'] as const).map((mode) => (
+                    <button
+                      key={mode}
+                      onClick={() => handleAutocompleteModeChange(mode)}
+                      className={`flex-1 px-3 py-1.5 text-xs rounded-md transition-all ${
+                        autocompleteMode === mode
+                          ? mode === 'general' ? 'bg-blue-600 text-white' :
+                            mode === 'flirty' ? 'bg-pink-600 text-white' :
+                            'bg-purple-600 text-white'
+                          : 'text-gray-400 hover:text-white hover:bg-gray-600/50'
+                      }`}
+                    >
+                      {mode === 'general' ? '💬 General' :
+                       mode === 'flirty' ? '💕 Flirty' :
+                       '💼 Professional'}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+
               {/* Auto-draft indicator */}
-              {isGeneratingDraft && (
+              {(isGeneratingDraft || isGeneratingAutocomplete) && (
                 <div className="mb-3 p-3 bg-blue-500/10 border border-blue-500/30 rounded-lg">
                   <div className="flex items-center gap-2">
                     <div className="w-4 h-4 border-2 border-blue-400 border-t-transparent rounded-full animate-spin"></div>
-                    <span className="text-sm text-blue-300 font-medium">Generating AI draft...</span>
+                    <span className="text-sm text-blue-300 font-medium">
+                      {autocompleteMode === 'professional' ? 'Converting to professional...' : 'Generating AI draft...'}
+                    </span>
                   </div>
                 </div>
               )}
               
-              {showDraftIndicator && !isGeneratingDraft && (
-                <div className="mb-3 p-3 bg-blue-500/10 border border-blue-500/30 rounded-lg">
-                  <div className="flex items-center gap-2">
+              {showDraftIndicator && !isGeneratingDraft && !isGeneratingAutocomplete && (
+                // Hide draft indicator for general/flirty modes when user has text in input
+                // For professional mode, only show if input has 25+ characters AND there's actual content
+                (autocompleteMode === 'professional' ? 
+                  (messageInput.trim().length >= 25 && autoDraftResponse.trim()) :
+                  !messageInput.trim()) && (
+                  <div className="mb-3 p-3 bg-blue-500/10 border border-blue-500/30 rounded-lg">
                     <div className="flex items-center gap-2">
-                      <div className="w-2 h-2 bg-blue-400 rounded-full animate-pulse"></div>
-                       <span className="text-sm text-blue-300 font-medium">AI Response Draft</span>
-                      <span className="text-xs text-blue-400/70">Ctrl+Space to accept</span>
+                      <div className="flex items-center gap-2">
+                        <div className="w-2 h-2 bg-blue-400 rounded-full animate-pulse"></div>
+                        <span className="text-sm text-blue-300 font-medium">
+                          {autocompleteMode === 'general' ? 'General AI Response' : 
+                           autocompleteMode === 'flirty' ? 'Flirty AI Response' : 
+                           'Professional AI Response'}
+                        </span>
+                        <span className="text-xs text-blue-400/70">Ctrl+Space to accept</span>
+                      </div>
+                    </div>
+                    <div className="mt-2 text-sm text-gray-300 italic">
+                      "{autoDraftResponse}"
                     </div>
                   </div>
-                  <div className="mt-2 text-sm text-gray-300 italic">
-                    "{autoDraftResponse}"
-                  </div>
-                </div>
+                )
               )}
 
-              {aiNotConfident && !isGeneratingDraft && !showDraftIndicator && (
-                <div className="mb-3 p-3 bg-yellow-500/10 border border-yellow-500/30 rounded-lg">
-                  <div className="flex items-center gap-2">
-                    <div className="w-2 h-2 bg-yellow-400 rounded-full"></div>
-                    <span className="text-sm text-yellow-300 font-medium">AI Not Confident</span>
-                    <span className="text-xs text-yellow-400/70">No auto-response generated</span>
+              {aiNotConfident && !isGeneratingDraft && !showDraftIndicator && !isGeneratingAutocomplete && (
+                // Hide "AI Not Confident" for general/flirty modes when user has text in input
+                // For professional mode, only show if input has 25+ characters
+                (autocompleteMode === 'professional' ? 
+                  messageInput.trim().length >= 25 :
+                  !messageInput.trim()) && (
+                  <div className="mb-3 p-3 bg-yellow-500/10 border border-yellow-500/30 rounded-lg">
+                    <div className="flex items-center gap-2">
+                      <div className="w-2 h-2 bg-yellow-400 rounded-full"></div>
+                      <span className="text-sm text-yellow-300 font-medium">AI Not Confident</span>
+                      <span className="text-xs text-yellow-400/70">No auto-response generated</span>
+                    </div>
+                    <div className="mt-2 text-sm text-gray-300">
+                      The AI wasn't confident enough to generate a response. You can type your own message.
+                    </div>
                   </div>
-                  <div className="mt-2 text-sm text-gray-300">
-                    The AI wasn't confident enough to generate a response. You can type your own message.
+                )
+              )}
+
+              {/* Autocomplete Error Display */}
+              {autocompleteError && (
+                <div className="mb-3 p-3 bg-red-500/10 border border-red-500/30 rounded-lg">
+                  <div className="flex items-center gap-2">
+                    <div className="w-2 h-2 bg-red-400 rounded-full"></div>
+                    <span className="text-sm text-red-300 font-medium">Error</span>
+                    <button
+                      onClick={() => setAutocompleteError(null)}
+                      className="text-xs text-red-400 hover:text-red-300 ml-auto underline"
+                    >
+                      Dismiss
+                    </button>
+                  </div>
+                  <div className="mt-1 text-sm text-red-200">
+                    {autocompleteError}
                   </div>
                 </div>
               )}
@@ -1386,6 +1795,88 @@ Generate a natural response:`,
           
         </div>
       </div>
+
+      {/* Professional Text Popup */}
+      {showProfessionalPopup && originalText && professionalText && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-[#1a1a1a] border border-gray-800/50 rounded-xl shadow-2xl w-full max-w-2xl max-h-[80vh] overflow-hidden">
+            {/* Header */}
+            <div className="flex items-center justify-between p-4 border-b border-gray-800/50">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 bg-gradient-to-br from-purple-500 to-indigo-500 rounded-lg flex items-center justify-center">
+                  <span className="text-white text-sm">💼</span>
+                </div>
+                <div>
+                  <h2 className="text-lg font-semibold text-white">Professional Text Converter</h2>
+                  <p className="text-xs text-gray-400">Convert your text to professional format</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowProfessionalPopup(false)}
+                className="text-gray-400 hover:text-white transition-colors p-1"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            {/* Content */}
+            <div className="p-4 space-y-4 max-h-[60vh] overflow-y-auto">
+              {/* Text Comparison */}
+              <div className="space-y-4">
+                {/* Original Text */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-sm font-medium text-gray-300">Original Text</h3>
+                    <button
+                      onClick={() => navigator.clipboard.writeText(originalText)}
+                      className="text-xs text-gray-400 hover:text-gray-300 transition-colors"
+                    >
+                      📋 Copy
+                    </button>
+                  </div>
+                  <div className="p-3 bg-gray-800/50 border border-gray-700/50 rounded-lg text-sm text-gray-300 leading-relaxed">
+                    {originalText}
+                  </div>
+                </div>
+
+                {/* Professional Text */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-sm font-medium text-blue-300">Professional Version</h3>
+                    <button
+                      onClick={() => navigator.clipboard.writeText(professionalText)}
+                      className="text-xs text-gray-400 hover:text-gray-300 transition-colors"
+                    >
+                      📋 Copy
+                    </button>
+                  </div>
+                  <div className="p-3 bg-gradient-to-r from-blue-900/30 to-purple-900/30 border border-blue-700/50 rounded-lg text-sm text-white leading-relaxed">
+                    {professionalText}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Footer Actions */}
+            <div className="p-4 border-t border-gray-800/50 flex gap-3">
+              <button
+                onClick={handleUseOriginal}
+                className="flex-1 px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white text-sm rounded-lg transition-colors"
+              >
+                📝 Use Original
+              </button>
+              <button
+                onClick={handleUseProfessional}
+                className="flex-1 px-4 py-2 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white text-sm rounded-lg transition-all"
+              >
+                ✨ Use Professional
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
        {/* AI Agent Settings Modal */}
        {showAgentSettings && (
@@ -1475,16 +1966,21 @@ Generate a natural response:`,
          </div>
        )}
 
-<SimpleWingman 
-        messages={messages}
-        onSuggestionGenerated={handleWingmanSuggestion}
-></SimpleWingman>
-
-<ProfessionalTextFloatingWidget
-        messageInput={messageInput}
-        onTextUpdate={setMessageInput}
-        disabled={!selectedChat || sendingMessage}
-></ProfessionalTextFloatingWidget>
+      <SettingsPage
+        isOpen={showSettings}
+        onClose={() => setShowSettings(false)}
+        selectedChat={selectedChat}
+        chatName={currentChatName}
+        agentInstructionsMap={agentInstructionsMap}
+        onUpdateAgentInstructions={handleUpdateAgentInstructions}
+        onDeleteAgentInstructions={handleDeleteAgentInstructions}
+        flirtIntensity={flirtIntensity}
+        onUpdateFlirtIntensity={handleUpdateFlirtIntensity}
+        responseLength={responseLength}
+        onUpdateResponseLength={handleUpdateResponseLength}
+        customContext={customContext}
+        onUpdateCustomContext={handleUpdateCustomContext}
+      />
 {
     /* Remove the ChatSummary popup component */}
       {/* <ChatSummary
