@@ -1306,7 +1306,7 @@ You are the user. Write your response to ${respondingTo}:`;
     'Unknown Chat';
 
   return (
-    <div className="min-h-screen bg-[#0f0f0f] text-gray-100">
+    <div className="min-h-screen modern-bg text-gray-100">
       <style jsx>{`
         @keyframes shimmer {
           0% { transform: translateX(-100%); }
@@ -1322,7 +1322,7 @@ You are the user. Write your response to ${respondingTo}:`;
         <div className="flex gap-4" style={{ height: 'calc(100vh - 3rem)' }}>
 
           {/* Network Sidebar - Compact Icon Bar */}
-          <div className="w-16 bg-[#1a1a1a] rounded-xl border border-gray-800/50 flex flex-col items-center py-4 justify-between">
+          <div className="w-16 glass-panel rounded-xl flex flex-col items-center py-4 justify-between">
             {/* Network Buttons */}
             <div className="flex flex-col items-center space-y-3">
               {accounts.map((account) => (
@@ -1351,7 +1351,7 @@ You are the user. Write your response to ${respondingTo}:`;
 
           {/* Chats Panel - Compact Design */}
           {chats.length > 0 && (
-            <div className="w-80 bg-[#1a1a1a] rounded-xl border border-gray-800/50 overflow-hidden flex flex-col">
+            <div className="w-80 glass-panel rounded-xl overflow-hidden flex flex-col">
               <div className="p-4 border-b border-gray-800/50">
                 <div className="flex items-center justify-between mb-3">
                   <h2 className="text-lg font-semibold text-white">
@@ -1432,7 +1432,7 @@ You are the user. Write your response to ${respondingTo}:`;
           )}
 
           {/* Messages Panel - Compact Design */}
-          <div className="flex-1 bg-[#1a1a1a] rounded-xl border border-gray-800/50 overflow-hidden flex flex-col">
+          <div className="flex-1 glass-panel rounded-xl overflow-hidden flex flex-col">
              <div className="p-4 border-b border-gray-800/50 flex-shrink-0">
                <div className="flex items-center justify-between">
                  <h2 className="text-lg font-semibold text-white">
@@ -1835,7 +1835,7 @@ You are the user. Write your response to ${respondingTo}:`;
       {/* Professional Text Popup */}
       {showProfessionalPopup && originalText && professionalText && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-[#1a1a1a] border border-gray-800/50 rounded-xl shadow-2xl w-full max-w-2xl max-h-[80vh] overflow-hidden">
+          <div className="glass-panel rounded-xl shadow-2xl w-full max-w-2xl max-h-[80vh] overflow-hidden">
             {/* Header */}
             <div className="flex items-center justify-between p-4 border-b border-gray-800/50">
               <div className="flex items-center gap-3">
@@ -1917,7 +1917,7 @@ You are the user. Write your response to ${respondingTo}:`;
        {/* AI Agent Settings Modal */}
        {showAgentSettings && (
          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-           <div className="bg-[#1a1a1a] rounded-xl border border-gray-800/50 p-6 w-full max-w-2xl mx-4">
+           <div className="glass-panel rounded-xl p-6 w-full max-w-2xl mx-4">
              <div className="flex items-center justify-between mb-4">
                <h3 className="text-lg font-semibold text-white">
                  🤖 AI Agent Settings
