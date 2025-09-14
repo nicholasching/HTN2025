@@ -8,6 +8,7 @@ import HoverableText from './HoverableText';
 import ChatSummaryOverlay from './ChatSummaryOverlay';
 import NetworkIcon from './NetworkIcon';
 import SettingsPage from './SettingsPage';
+import VAPIWidget from './VAPIWidget';
 
 export default function BeeperExample() {
   const [accessToken, setAccessToken] = useState<string | null>(null);
@@ -1321,25 +1322,31 @@ You are the user. Write your response to ${respondingTo}:`;
         <div className="flex gap-4" style={{ height: 'calc(100vh - 3rem)' }}>
 
           {/* Network Sidebar - Compact Icon Bar */}
-          <div className="w-16 bg-[#1a1a1a] rounded-xl border border-gray-800/50 flex flex-col items-center py-4 space-y-3">
-            {accounts.map((account) => (
-              <button
-                key={account.accountID}
-                onClick={() => handleFetchChats(account.accountID)}
-                className={`w-12 h-12 rounded-xl flex items-center justify-center text-lg transition-all hover:scale-110 ${
-                  selectedAccount === account.accountID 
-                    ? 'bg-purple-500 shadow-lg shadow-purple-500/30' 
-                    : 'bg-gray-700 hover:bg-gray-600'
-                }`}
-                title={account.network}
-              >
-                <NetworkIcon 
-                  network={account.network} 
-                  size={24} 
-                  className="text-white"
-                />
-              </button>
-            ))}
+          <div className="w-16 bg-[#1a1a1a] rounded-xl border border-gray-800/50 flex flex-col items-center py-4 justify-between">
+            {/* Network Buttons */}
+            <div className="flex flex-col items-center space-y-3">
+              {accounts.map((account) => (
+                <button
+                  key={account.accountID}
+                  onClick={() => handleFetchChats(account.accountID)}
+                  className={`w-12 h-12 rounded-xl flex items-center justify-center text-lg transition-all hover:scale-110 ${
+                    selectedAccount === account.accountID 
+                      ? 'bg-purple-500 shadow-lg shadow-purple-500/30' 
+                      : 'bg-gray-700 hover:bg-gray-600'
+                  }`}
+                  title={account.network}
+                >
+                  <NetworkIcon 
+                    network={account.network} 
+                    size={24} 
+                    className="text-white"
+                  />
+                </button>
+              ))}
+            </div>
+            
+            {/* VAPI Voice Assistant Button - Bottom Aligned */}
+            <VAPIWidget />
           </div>
 
           {/* Chats Panel - Compact Design */}

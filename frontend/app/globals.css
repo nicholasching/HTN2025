@@ -24,3 +24,15 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* Hide default VAPI buttons */
+[data-vapi-widget] {
+  display: none !important;
+}
+
+/* Hide any VAPI floating buttons */
+.vapi-widget,
+.vapi-button,
+[class*="vapi-"] {
+  display: none !important;
+}
