@@ -72,7 +72,7 @@ async function findChatForContact(contactName: string, platform: string, accessT
     if (platform === 'discord') {
       accountName = 'discordgo'; // Discord account is named 'discordgo' in Beeper
     } else if (platform === 'instagram') {
-      accountName = 'instagram'; // Instagram account name
+      accountName = 'instagramgo'; // Instagram account is named 'instagramgo' in Beeper
     }
     
     const platformChats = chats.filter((chat: any) => chat.accountID === accountName);
