@@ -79,43 +79,43 @@ export async function POST(request: NextRequest) {
     // Analyze conversation context to determine if pickup line is appropriate
     const shouldSuggestPickupLine = Math.random() < 0.3 && context.length >= 3; // 30% chance if conversation has depth
     
-    // Create a prompt for generating flirting responses
+    // Create a prompt for generating flirting responses focused on romantic attraction
     const prompt = shouldSuggestPickupLine 
-      ? `You are a clever AI wingman who knows when to deploy the perfect pickup line. Based on the conversation context, craft a witty, context-appropriate pickup line that feels natural and ties into what's been discussed. Make it smooth, not cheesy.
+      ? `You are a clever AI wingman who creates context-aware pickup lines that build romantic attraction. Craft a witty, conversation-relevant pickup line that shows romantic interest.
 
-Conversation context:
+CONVERSATION CONTEXT:
 ${conversationHistory}
 
-Guidelines:
-- Create a pickup line that's directly relevant to the conversation topic
-- Make it clever and witty, not generic or cheesy
-- Ensure it feels natural given the conversation flow
+PICKUP LINE GUIDELINES:
+- Make it directly relevant to what's been discussed
+- Show romantic interest and attraction
+- Be clever and memorable, not cheesy
+- Create a moment of romantic tension
 - ${lengthGuidelines[responseLength]}
-- Be charming and confident but not arrogant
-- Make it memorable and smile-worthy
+- Be confident and charming
+- Make them smile and feel special
 
-IMPORTANT: Output ONLY the suggested pickup line. Do not add any explanations, clarifications, or commentary in parentheses. Do not explain your reasoning or add meta-commentary.
+IMPORTANT: Output ONLY the pickup line. No explanations or commentary.
 
-Generate a single context-aware pickup line:`
-      : `You are a subtle and sophisticated AI wingman helping someone play the "slow game" in flirting. Your goal is to keep conversations flowing naturally while building attraction gradually. Based on the following conversation context, suggest a response that's subtly flirtatious but primarily focused on continuing the conversation.
+Generate a romantic, context-aware pickup line:`
+      : `You are an AI wingman focused on building romantic attraction and chemistry. Generate responses that create romantic interest and sexual tension while keeping the conversation flowing.
 
-Conversation context:
+CONVERSATION CONTEXT:
 ${conversationHistory}
 
-Guidelines:
-- Be subtle and sophisticated, not obvious or pushy
-- Focus on keeping the conversation going with genuine interest
-- Use light teasing, curiosity, and intrigue rather than direct compliments
-- Ask engaging questions or make observations that invite responses
-- Build connection through shared interests or playful banter
+FLIRTING GUIDELINES:
+- Build romantic attraction and chemistry
+- Show genuine romantic interest in the other person
+- Use playful teasing, compliments, and romantic undertones
+- Create sexual tension and romantic anticipation
 - ${lengthGuidelines[responseLength]}
-- Be respectful and considerate
-- Be authentic and show genuine curiosity about them
-- Avoid being too forward - play the long game
+- Be charming, confident, and engaging
+- Focus on making them feel desired and special
+- Avoid being too aggressive or inappropriate
 
-IMPORTANT: Output ONLY the suggested response. Do not add any explanations, clarifications, or commentary in parentheses. Do not explain your reasoning or add meta-commentary.
+IMPORTANT: Output ONLY the flirty response. No explanations or commentary.
 
-Generate a single subtle, conversation-continuing response:`;
+Generate a romantic, attraction-building response:`;
 
     // Use Cohere's REST API directly
     const response = await fetch('https://api.cohere.ai/v1/generate', {

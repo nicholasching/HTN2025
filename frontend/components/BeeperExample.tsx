@@ -755,13 +755,28 @@ export default function BeeperExample() {
         },
         body: JSON.stringify({
           message: latestMessage.text || '',
-          instructions: `Please provide a brief, conversational response to this message. Focus on being brief and natural. Keep it very concise and appropriate for the context:
+          instructions: `You are a helpful AI assistant that generates contextual, conversational responses. Your goal is to respond naturally to the most recent message while considering the conversation history.
 
+CONTEXT ANALYSIS:
+- Review the conversation history to understand the topic, tone, and relationship dynamics
+- Identify what the other person is saying or asking in their latest message
+- Consider the appropriate response based on the conversation flow
+
+RESPONSE GUIDELINES:
+- Be conversational and natural, matching the tone of the conversation
+- Directly address what the other person said or asked
+- Keep it brief (1-2 sentences, 15-30 words)
+- Be helpful, friendly, and engaging
+- Ask follow-up questions when appropriate
+- Show genuine interest in continuing the conversation
+- Avoid being overly formal or robotic
+
+CONVERSATION CONTEXT:
 ${contextString}
 
-Message to respond to: ${latestMessage.text || ''}
+LATEST MESSAGE TO RESPOND TO: ${latestMessage.text || ''}
 
-Response:`,
+Generate a natural, contextual response:`,
           contextMessages: contextString
         }),
       });
@@ -1091,17 +1106,26 @@ Response:`,
         };
       });
 
-      // Create intensity-based prompts
+      // Create intensity-based flirty prompts focused on attraction and romantic interest
       const intensityPrompts = {
-        mild: `1 sentence. Neutral and friendly.
-                Acknowledge what they said; no compliments, no invites.
-                No questions unless they asked one.`,
-        medium: `1–2 short sentences. Warm, lightly interested.
-                Use EITHER one soft compliment OR one light question (not both).
-                No invites.`,
-        hot: `1–2 short sentences. Very flirty and confident (PG).
-                Use EITHER a specific compliment + quick invite OR a playful tease + curious follow-up.
-                Make attraction obvious.`
+        mild: `You are subtly building romantic interest. Be warm and slightly more personal than a friend would be.
+                - Acknowledge what they said with gentle warmth
+                - Add a tiny hint of personal interest or light teasing
+                - Keep it friendly but with a subtle romantic undertone
+                - 1 sentence, 15-25 words`,
+        medium: `You are actively flirting and building attraction. Be charming and show romantic interest.
+                - Compliment something specific about them or their message
+                - Use playful teasing or light banter
+                - Show you're interested in them romantically
+                - Ask a question that shows personal interest
+                - 1-2 sentences, 20-35 words`,
+        hot: `You are being confidently flirty and making romantic interest very clear. Be bold and charming.
+                - Give a specific, genuine compliment about them
+                - Use playful teasing or confident banter
+                - Make it obvious you're attracted to them
+                - Suggest meeting up or doing something together
+                - Be bold but respectful (PG-rated)
+                - 1-2 sentences, 25-40 words`
       };
 
       // Build conversation history for the prompt
@@ -1113,12 +1137,17 @@ Response:`,
       const lastMessage = recentMessages[recentMessages.length - 1];
       const respondingTo = lastMessage?.sender === 'You' ? 'the other person' : lastMessage?.sender || 'them';
 
-      const fullPrompt = `${intensityPrompts[flirtIntensity]}
+      const fullPrompt = `You are an AI wingman helping someone flirt and build romantic attraction. Your goal is to generate responses that create chemistry and romantic interest.
 
-${customContext ? `Additional context: ${customContext}\n\n` : ''}Conversation context:
+FLIRTING STRATEGY (${flirtIntensity.toUpperCase()} intensity):
+${intensityPrompts[flirtIntensity]}
+
+${customContext ? `ADDITIONAL CONTEXT: ${customContext}\n\n` : ''}CONVERSATION HISTORY:
 ${conversationHistory}
 
-You are the user. Write your response to ${respondingTo}:`;
+TARGET PERSON: ${respondingTo}
+
+Generate a flirty response that builds attraction and romantic interest:`;
 
       const response = await fetch('/api/generate-flirt', {
         method: 'POST',
