@@ -66,7 +66,7 @@ export async function fetchAllChats(
     if (options.type) params.set('type', options.type);
     if (options.unreadOnly !== undefined) params.set('unreadOnly', String(options.unreadOnly));
     
-    const response = await fetch(`/api/beeper/chats?${params}`, {
+    const response = await fetch(`http://localhost:3000/api/beeper/chats?${params}`, {
       method: 'GET',
       headers: {
         'Authorization': `Bearer ${accessToken}`,

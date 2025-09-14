@@ -45,7 +45,7 @@ export async function sendMessage(
     console.log(`📤 Sending message to chat: ${messageParams.chatID}`);
     console.log(`Message: "${messageParams.text}"`);
     
-    const response = await fetch('/api/beeper/send-message', {
+    const response = await fetch('http://localhost:3000/api/beeper/send-message', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${accessToken}`,
